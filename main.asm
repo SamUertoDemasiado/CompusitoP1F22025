@@ -15,6 +15,34 @@ RETFIE  FAST
 ;--------------------------------
 ;   Asignación de variables
 ;--------------------------------
+    
+OUTPUT EQU LATA
+MATRIZ EQU 0
+SERVO EQU 1
+RANDGEN EQU 2
+MENU0 EQU 3
+MENU1 EQU 4
+MENU2 EQU 5 
+ 
+
+
+RANDOM EQU LATC
+C0 EQU 0
+C1 EQU 1
+C2 EQU 2
+C3 EQU 3
+ 
+SEVENSEG EQU LATD ;PUESTO EN EL ORDEN  BIT0=FGDCBA=BIT6
+ 
+INPUT EQU PORTB
+BTR EQU 0
+BTL EQU 1
+BTSEL EQU 3
+PCI EQU 2
+RPULSE EQU 4
+NEWNUMBER EQU 5
+     
+    
 ;Tengo que pensar nombres mejores (let me think)
 flag        EQU 0x21  ; BUCLE_200 
 valor       EQU 0x22  ; BUCLE_200, BUCLE_30
@@ -39,6 +67,38 @@ INIT_PORTS
     MOVLW B'00000000' ;D7 nada, D6 7Seg6, D5 7Seg5, D4 7Seg4, D3 7Seg3, D2 7Seg2, D1 7Seg1, D0 7Seg0
     MOVWF TRISD, ACCESS
     RETURN
+    
+INIT_PORTS2
+    ; --- PORTA OUTPUT ---
+    ; OUTPUT, MATRIZ, SERVO, RANDGEN, MENU0, MENU1, MENU2
+    BCF TRISA, MATRIZ, ACCESS
+    BCF TRISA, SERVO, ACCESS
+    BCF TRISA, RANDGEN, ACCESS
+    BCF TRISA, MENU0, ACCESS
+    BCF TRISA, MENU1, ACCESS
+    BCF TRISA, MENU2, ACCESS
+    
+    ; --- PORTB INPUT ---
+    ; BTR, BTL, BTSEL, PCI, RPULSE, NEWNUMBER 
+    BSF TRISB, BTR, ACCESS
+    BSF TRISB, BTL, ACCESS
+    BSF TRISB, BTSEL, ACCESS
+    BSF TRISB, PCI, ACCESS
+    BSF TRISB, RPULSE, ACCESS
+    BSF TRISB, NEWNUMBER, ACCESS
+    
+    ; --- PORTC OUTPUT ---
+    ; C0, C1, C2, C3 
+    BCF TRISC, C0, ACCESS
+    BCF TRISC, C1, ACCESS
+    BCF TRISC, C2, ACCESS
+    BCF TRISC, C3, ACCESS
+    
+    ; --- PORTD OUTPUT ---
+    ; Todos los bits del PORTD para el 7-segment display son outputs.
+    CLRF TRISD, ACCESS 
+    
+    RETURN
 
 INIT_CONFIG
     CLRF TRISC
@@ -54,7 +114,7 @@ RESET_INTERRUPTS
     ;Usamos el timer0 de 16 bits (2^16 = 65536)
     ;65535 - 50000 = 15536 (3CB0 en hexa) Se ha usado el 1:2 preescaler 100k/2 = 50k
     
-    ;------MIRAR DE AUMENTAR EL PRESCALER A 8---------------
+    ;------MIRAR DE AUMENTAR EL PRESCALER A 32s---------------
     MOVLW 0xB0 ;B0 parte baja
     MOVWF TMR0L,0
     MOVLW 0x3C ;3C parte alta, es el valor TMR0H
@@ -123,7 +183,3 @@ END
 
 ;Las prioridades high son de timer
 ;Las proridades low son para perifericos
-    
-
-
-    
