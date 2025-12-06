@@ -7,50 +7,32 @@ CONFIG  WDT=OFF    ; Desactivem el WatchDog Timer.
 ORG	    0x0000
 GOTO	    MAIN
 ORG	    0x0008  ;Interrupts de alta prioridad
-GOTO	    HIGH_IRS
-;GOTO    INTERRUPTS
+GOTO	    HIGH_IRS ;Zona de interrupciones
 ORG	    0x0018
 RETFIE  FAST  
 
 ;--------------------------------
 ;   Asignación de variables
 ;--------------------------------
-    
-OUTPUT EQU LATA
-MATRIZ EQU 0
-SERVO EQU 1
-RANDGEN EQU 2
-MENU0 EQU 3
-MENU1 EQU 4
-MENU2 EQU 5 
- 
+   
 
-
-RANDOM EQU LATC
-C0 EQU 0
-C1 EQU 1
-C2 EQU 2
-C3 EQU 3
- 
-SEVENSEG EQU LATD ;PUESTO EN EL ORDEN  BIT0=FGDCBA=BIT6
- 
-INPUT EQU PORTB
-BTR EQU 0
-BTL EQU 1
-BTSEL EQU 3
-PCI EQU 2
-RPULSE EQU 4
-NEWNUMBER EQU 5
-     
-    
-;Tengo que pensar nombres mejores (let me think)
-flag        EQU 0x21  ; BUCLE_200 
-valor       EQU 0x22  ; BUCLE_200, BUCLE_30
-valor_2     EQU 0x23  ; BUCLE_30
-decadas     EQU 0x24  ; BUCLE_30
+flag_bucle200   EQU 0x21  ; flag de que he contado 200 vueltas
+contador_200	EQU 0x22  ; contador de 200 vueltas
+contador_30     EQU 0x23  ; contador de 30 vueltas
+decadas		EQU 0x24  ; almacena las decadas 
+baby		EQU 0x25  ; Flag que indica estado baby
+teenager	EQU 0x26  ; Flag que indica estado teenager
+adult		EQU 0x27  ; Flag que indica estado adult
+dead		EQU 0x28  ; Flag que indica la muerte del tamagotchi
 
 Posicio_RAM EQU 0x81 ;en la posicion 0x81 de memoria 
-
+ 
+BCF flag_bucle200,ACCESS
+MOVLW .55
+MOVWF contador_200,ACCESS
+CLRF contador_30,ACCESS
+BSF baby,ACCESS
+CLRF decadas,ACCESS
 
 
 INIT_PORTS
@@ -68,37 +50,6 @@ INIT_PORTS
     MOVWF TRISD, ACCESS
     RETURN
     
-INIT_PORTS2
-    ; --- PORTA OUTPUT ---
-    ; OUTPUT, MATRIZ, SERVO, RANDGEN, MENU0, MENU1, MENU2
-    BCF TRISA, MATRIZ, ACCESS
-    BCF TRISA, SERVO, ACCESS
-    BCF TRISA, RANDGEN, ACCESS
-    BCF TRISA, MENU0, ACCESS
-    BCF TRISA, MENU1, ACCESS
-    BCF TRISA, MENU2, ACCESS
-    
-    ; --- PORTB INPUT ---
-    ; BTR, BTL, BTSEL, PCI, RPULSE, NEWNUMBER 
-    BSF TRISB, BTR, ACCESS
-    BSF TRISB, BTL, ACCESS
-    BSF TRISB, BTSEL, ACCESS
-    BSF TRISB, PCI, ACCESS
-    BSF TRISB, RPULSE, ACCESS
-    BSF TRISB, NEWNUMBER, ACCESS
-    
-    ; --- PORTC OUTPUT ---
-    ; C0, C1, C2, C3 
-    BCF TRISC, C0, ACCESS
-    BCF TRISC, C1, ACCESS
-    BCF TRISC, C2, ACCESS
-    BCF TRISC, C3, ACCESS
-    
-    ; --- PORTD OUTPUT ---
-    ; Todos los bits del PORTD para el 7-segment display son outputs.
-    CLRF TRISD, ACCESS 
-    
-    RETURN
 
 INIT_CONFIG
     CLRF TRISC
@@ -106,53 +57,93 @@ INIT_CONFIG
     MOVWF INTCON, ACCESS
     MOVLW B'10000000'
     MOVWF T0CON, ACCESS
+    BSF RCON,IPEN ;Se activan las high-priority
+    MOVLW B'11010000'
+    MOVWF INTCON3
+    
     RETURN
 
 RESET_INTERRUPTS
     ;Tins = 4/40MHz = 100ns
     ;10ms/100ns = 100k tics
     ;Usamos el timer0 de 16 bits (2^16 = 65536)
-    ;65535 - 50000 = 15536 (3CB0 en hexa) Se ha usado el 1:2 preescaler 100k/2 = 50k
+    ;65535 - 3125 = 62411. Se ha usado el 1:32 preescaler 100k/32 = 3125
+ 
+    MOVLW LOW(.62411) 
+    MOVWF TMR0L,ACCESS
+    MOVLW HIGH(.62411) 
+    MOVWF TMR0H,ACCESS
     
-    ;------MIRAR DE AUMENTAR EL PRESCALER A 32s---------------
-    MOVLW 0xB0 ;B0 parte baja
-    MOVWF TMR0L,0
-    MOVLW 0x3C ;3C parte alta, es el valor TMR0H
-    MOVWF TMR0H,0
-   
-    ; Activar Timer0
-    BSF T0CON, TMR0ON, 0
-    ; Activar interrupción Timer0
-    ;BSF INTCON, TMR0IE, 0
     RETURN 
 
 HIGH_IRS
     ;La interrupcion saltara cada 10ms
-    BTFSC INTCON, TMR0IF,0
-    GOTO TMR0_INTERRUPT
+    BTFSC INTCON, TMR0IF,ACCESS
+    CALL TMR0_INTERRUPT
     RETFIE FAST
 
 TMR0_INTERRUPT
     BSF PORTC,0
     BCF PORTC,0
     CALL RESET_INTERRUPTS
-    BCF INTCON, TMR0IF ;es el bit 2 del INTCON
+    BCF INTCON, TMR0IF,ACCESS ;es el bit 2 del INTCON
+    RETURN
 
 BUCLE_200
-    BSF flag,0
-    INCFSZ valor,0
-    BCF flag,0
-    BTFSC flag,0
+    BSF flag_bucle200,ACCESS
+    INCFSZ contador_200,ACCESS
+    BCF flag_bucle200,ACCESS
+    BTFSS flag_bucle200,ACCESS
     CALL BUCLE_30
     RETURN
 
 BUCLE_30
-    INCF valor_2,0
-    MOVLW valor_2
-    MOVWF valor, ACCESS
-    CPFSEQ valor
-    INCF decadas,0
+    MOVLW .55
+    MOVWF contador_200,ACCESS
+    INCF contador_30,ACCESS
+    MOVLW .30   
+    CPFSLT contador_30,ACCESS ;Comparo 30 a ver si he llegado a 30, si he llegado a 30 reinicio el contador_30
+    ;Comparo 30 a ver si he llegado a 30, si he llegado a 30, cuando vaya a contar 31, me suma 1 decada
+    CALL RESET_BUCLES
+    
     RETURN
+
+RESET_BUCLES
+    INCF decadas,ACCESS
+    CLRF contador_30,ACCESS
+    CALL ENVEJECER
+    RETURN
+    
+
+ENVEJECER    
+    MOVLW .3
+    CPFSLT decadas,ACCESS ;Aquí cambio a teenager
+    BCF baby,ACCESS
+    CPFSLT decadas,ACCESS
+    BSF teenager,ACCESS
+    
+    MOVLW .6
+    CPFSLT decadas,ACCESS ;Aquí cambio a adult
+    BCF teenager,ACCESS
+    CPFSLT decadas,ACCESS
+    BSF adult,ACCESS
+    
+    MOVLW .10
+    CPFSLT decadas,ACCESS
+    BCF adult,ACCESS
+    CPFSLT decadas,ACCESS
+    BSF dead,ACCESS
+    CPFSLT decadas,ACCESS
+    CALL IS_DEAD
+    RETURN
+    
+IS_DEAD
+    GOTO IS_DEAD
+    RETURN
+    
+    
+
+    
 
 FIRE ;FUNCION DEBUG
 
@@ -165,14 +156,12 @@ GOTO FIRE
 
 
 MAIN	  
-;BSF RCON,IPEN ;Se activan las high-priority
 
-
-;MOVLW B'11010000'
-;MOVWF INTCON3
 ;CALL FIRE
 CALL INIT_CONFIG
 CALL RESET_INTERRUPTS
+CALL TMR0_INTERRUPT
+
 GOTO LOOP
 
 LOOP
@@ -183,3 +172,7 @@ END
 
 ;Las prioridades high son de timer
 ;Las proridades low son para perifericos
+    
+
+
+    
