@@ -28,7 +28,8 @@ dead		EQU 0x28  ; Flag que indica la muerte del tamagotchi
 Posicio_RAM EQU 0x81 ;en la posicion 0x81 de memoria 
  
 BCF flag_bucle200,ACCESS
-MOVLW .55
+MOVLW .6
+;MOVLW .55
 MOVWF contador_200,ACCESS
 CLRF contador_30,ACCESS
 BSF baby,ACCESS
@@ -55,9 +56,11 @@ INIT_CONFIG
     CLRF TRISC
     MOVLW B'11100000'
     MOVWF INTCON, ACCESS
-    MOVLW B'10000000'
+    
+    MOVLW B'10000000' 
     MOVWF T0CON, ACCESS
-    BSF RCON,IPEN ;Se activan las high-priority
+    
+    BSF RCON,IPEN  ;Se activan las high-priority
     MOVLW B'11010000'
     MOVWF INTCON3
     
@@ -65,16 +68,16 @@ INIT_CONFIG
 
 RESET_INTERRUPTS
     ;Tins = 4/40MHz = 100ns
-    ;10ms/100ns = 100k tics
+    ;1ms/100ns = 10k tics
     ;Usamos el timer0 de 16 bits (2^16 = 65536)
-    ;65535 - 3125 = 62411. Se ha usado el 1:32 preescaler 100k/32 = 3125
- 
-    MOVLW LOW(.62411) 
+    ;65536 - 5000 = 60536. Se ha usado el 1:2 preescaler 10k/2 = 5000 tics de timer
+
+    MOVLW LOW(.60536) 
     MOVWF TMR0L,ACCESS
-    MOVLW HIGH(.62411) 
+    MOVLW HIGH(.60536) 
     MOVWF TMR0H,ACCESS
     
-    RETURN 
+    RETURN
 
 HIGH_IRS
     ;La interrupcion saltara cada 10ms
@@ -88,12 +91,25 @@ TMR0_INTERRUPT
     CALL RESET_INTERRUPTS
     BCF INTCON, TMR0IF,ACCESS ;es el bit 2 del INTCON
     RETURN
+    
+TMR0_INTERRUPT
+    ;poner las dos para debugar que va a 1ms en el osciloscopio
+    ;BSF PORTC,0
+    ;BCF PORTC,0
+
+    CALL RESET_INTERRUPTS
+
+    CALL BUCLE_200
+
+    BCF INTCON, TMR0IF,ACCESS 
+    
+    RETURN
 
 BUCLE_200
     BSF flag_bucle200,ACCESS
     INCFSZ contador_200,ACCESS
     BCF flag_bucle200,ACCESS
-    BTFSS flag_bucle200,ACCESS
+    BTFSC flag_bucle200,ACCESS
     CALL BUCLE_30
     RETURN
 
@@ -102,6 +118,18 @@ BUCLE_30
     MOVWF contador_200,ACCESS
     INCF contador_30,ACCESS
     MOVLW .30   
+    CPFSLT contador_30,ACCESS 
+    CALL RESET_BUCLES
+    
+    RETURN
+    
+    BUCLE_30
+    MOVLW .6         ;Cuento 250 veces     
+    MOVWF contador_200,ACCESS
+    
+    INCF contador_30,ACCESS
+    MOVLW .240      ;Cuento 240 veces  250*240 = 60000 tics. 60000*1ms = 60s
+    
     CPFSLT contador_30,ACCESS ;Comparo 30 a ver si he llegado a 30, si he llegado a 30 reinicio el contador_30
     ;Comparo 30 a ver si he llegado a 30, si he llegado a 30, cuando vaya a contar 31, me suma 1 decada
     CALL RESET_BUCLES
