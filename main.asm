@@ -14,8 +14,8 @@ RETFIE  FAST
 ;--------------------------------
 ;   Asignación de variables
 ;--------------------------------
-   
-
+    
+    
 contador_10ms	EQU 0x22  ; contador de 99 vueltas
 contador_1s    EQU 0x23  ; contador de 99 vueltas
 decadas		EQU 0x24  ; almacena las decadas 
@@ -184,7 +184,7 @@ PMW
     SUBWF   t0, F     ; t0 = 200 - t1
 
     MOVF t1, W
-    BTFSS PORTA,1,ACCESS ; si RA1=1 ? usa t1, si no ? t0
+    BTFSS LATA,1,ACCESS ; si RA1=1 ? usa t1, si no ? t0
     MOVF t0, W
 
     CPFSLT tact       ; si tact < W ? salta BTG/CLRF
