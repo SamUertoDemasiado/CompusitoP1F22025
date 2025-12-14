@@ -9,8 +9,7 @@ GOTO	    MAIN
 ORG	    0x0008  ;Interrupts de alta prioridad
 GOTO	    HIGH_IRS ;Zona de interrupciones
 ORG	    0x0018
-RETFIE  FAST  
-
+RETFIE FAST
 ;--------------------------------
 ;   AsignaciÃ³n de variables
 ;--------------------------------
@@ -24,12 +23,15 @@ teenager	EQU 0x26  ; Flag que indica estado teenager
 adult		EQU 0x27  ; Flag que indica estado adult
 dead		EQU 0x28  ; Flag que indica la muerte del tamagotchi
 contador_1m	EQU 0x29  ; contador de 59 vueltas
+flag_16ms		EQU 0X2A ; flag contar 16ms
+contador_16ms	EQU 0X2B ; counter 16ms
+mode		EQU 0x2C ; menu del juego
 t0		EQU 0X30 ; tiempo que el pmw ha de estar a 0
 t1		EQU 0X31 ; Tiempo que ha de estar a 1
 tact		EQU 0x32; tiempo actual del estado actual del pmw
 		
 Posicio_RAM EQU 0x81 ;en la posicion 0x81 de memoria 
-
+    
 
 INIT_PORTS
     ;PORTA Todo de salida; grid, servo, RandomGenerated, Menu[2..0]
@@ -49,18 +51,118 @@ INIT_PORTS
     MOVWF TRISD, ACCESS
     
     CLRF contador_10ms,ACCESS
- CLRF contador_1s,ACCESS
- CLRF contador_1m,ACCESS
- CLRF t0,ACCESS
- CLRF t1,ACCESS
- CLRF tact,ACCESS
-BSF baby,ACCESS
-CLRF decadas,ACCESS
-BSF LATA,0,ACCESS
- BSF LATA,1 
+    CLRF contador_1s,ACCESS
+    CLRF contador_1m,ACCESS
+    CLRF t0,ACCESS
+    CLRF t1,ACCESS
+    CLRF tact,ACCESS
+    BSF baby,ACCESS
+    CLRF decadas,ACCESS
+    BSF LATA,1
+    BCF flag_16ms,0
+    CLRF mode,ACCESS
+    RETURN
+
+BOTON
+    BSF flag_16ms,1
+
+    MOVLW   .159                 ; ¿hemos llegado a 16ms?
+    CPFSEQ  contador_16ms
+    GOTO BOTON                        ; si NO es 16ms vuelvo
+
+    ; Si llegamos aquí, contador_16ms == 99
+    BCF flag_16ms,1
+    CLRF    contador_16ms,F          ; reseteo segundos
+MS16
+    BTFSC   PORTB,0,ACCESS      ; si RB0=1 (no pulsado) salta
+    CALL    NEXT_MODE
+
+    ; ---- Botón izquierda (RB1) ----
+    BTFSC   PORTB,1,ACCESS
+    CALL    PREV_MODE
+
+    ; ---- Botón select ---
+    BTFSC   PORTB,2,ACCESS
+    CALL    SELECT_MODE
+
+MS16Vuelta_sinpulsar
+    BTFSC   PORTB,0,ACCESS
+    GOTO    MS16Vuelta_sinpulsar
+
+    BTFSC   PORTB,1,ACCESS
+    GOTO    MS16Vuelta_sinpulsar
+
+    BTFSC   PORTB,2,ACCESS
+    GOTO    MS16Vuelta_sinpulsar
+MS16Vuelta
+        BSF flag_16ms,1
+
+    MOVLW   .159                 ; ¿hemos llegado a 16ms?
+    CPFSEQ  contador_16ms
+    GOTO MS16Vuelta                        ; si NO es 16ms vuelvo
+
+    ; Si llegamos aquí, contador_16ms == 99
+    BCF flag_16ms,1
+    CLRF    contador_16ms,F          ; reseteo segundos
     RETURN
     
-
+NEXT_MODE
+    INCF    mode, F            ; MODE++
+    MOVLW   .4                 ; si MODE == 4 -> volver a 1
+    CPFSEQ  mode, ACCESS
+    GOTO    NM_OK
+    MOVLW   .1
+    MOVWF   mode, ACCESS
+NM_OK
+    CALL    UPDATE_LEDS
+    RETURN
+    
+PREV_MODE
+    DECF    mode, F            ; MODE--
+    MOVF    mode, W            ; si MODE == 0 -> poner 3
+    BNZ     PM_OK              ; (BNZ = branch if not zero)
+    MOVLW   .3
+    MOVWF   mode, ACCESS
+PM_OK
+    CALL    UPDATE_LEDS
+    RETURN
+    
+SELECT_MODE
+    RETURN
+    
+UPDATE_LEDS
+    ; Limpia solo RA2..RA0 (deja el resto de LATA igual)
+    MOVLW   b'11111000'
+    ANDWF   LATA, F, ACCESS
+    ; MODE == 1 ?
+    MOVF    mode, W, ACCESS
+    MOVLW   .1
+    CPFSEQ  mode, ACCESS
+    GOTO    CHECK_M2
+    ; Leds = 100
+    BSF     LATA,3,ACCESS
+    BCF     LATA,4,ACCESS
+    BCF     LATA,5,ACCESS
+    RETURN
+CHECK_M2
+    MOVLW   .2
+    CPFSEQ  mode, ACCESS
+    GOTO    MODE3
+    ; Leds = 110
+    BSF     LATA,3,ACCESS
+    BSF     LATA,4,ACCESS
+    BCF     LATA,5,ACCESS
+    RETURN 
+MODE3
+    ; Leds = 010
+    BCF     LATA,3,ACCESS
+    BSF     LATA,4,ACCESS
+    BCF     LATA,5,ACCESS
+    RETURN
+    
+    
+    
+    
 INIT_CONFIG
     CLRF TRISC
     MOVLW B'11100000'
@@ -68,9 +170,9 @@ INIT_CONFIG
     MOVLW B'10001000'
     MOVWF T0CON, ACCESS
     BSF RCON,IPEN ;Se activan las high-priority
-    MOVLW B'11010000'
+    MOVLW B'11000000'
     MOVWF INTCON3
-    
+    BSF INTCON2,RBPU
     RETURN
 
 RESET_INTERRUPTS
@@ -109,6 +211,7 @@ BUCLE_10MS          ; cuenta 10ms
     ; Si llegamos aquí, contador_10ms == 100
     CLRF    contador_10ms         ; reseteo a 0
     CALL    BUCLE_SEG             ; acumulo 10ms
+    
     RETURN
 
 BUCLE_SEG           ; cuenta segundos
@@ -117,6 +220,9 @@ BUCLE_SEG           ; cuenta segundos
     MOVLW   .99                  ; ¿hemos llegado a 1000ms?
     CPFSEQ  contador_1s
     RETURN                        ; si NO es 100, salgo
+    
+    BTFSC flag_16ms	; contar 16
+    INCF    contador_16ms, F       ; contador_seg++
 
     ; Si llegamos aquí, contador_seg == 99
     CLRF    contador_1s          ; reseteo segundos
@@ -193,6 +299,11 @@ PMW
     CLRF tact
     RETURN
 
+
+
+
+    
+    
 FIRE ;FUNCION DEBUG
 
 MOVLW   b'00000000'
@@ -211,15 +322,14 @@ CALL INIT_CONFIG
 CALL RESET_INTERRUPTS
 
 LOOP
-BSF LATA,2,0
 
+    BTFSC   PORTB,0,ACCESS
+	CALL BOTON
+    BTFSC   PORTB,1,ACCESS
+	CALL BOTON
+    BTFSC   PORTB,2,ACCESS
+	CALL BOTON
+
+    
 GOTO LOOP
 END
-
-
-;Las prioridades high son de timer
-;Las proridades low son para perifericos
-    
-
-
-    
