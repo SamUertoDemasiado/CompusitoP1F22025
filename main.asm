@@ -60,39 +60,42 @@ INIT_PORTS
     CLRF decadas,ACCESS
     BSF LATA,1
     BCF flag_16ms,0
-    CLRF mode,ACCESS
+    MOVLW .1
+    MOVWF mode,ACCESS
+    CALL UPDATE_LEDS
+
     RETURN
 
 BOTON
     BSF flag_16ms,1
 
-    MOVLW   .159                 ; ¿hemos llegado a 16ms?
+    MOVLW   .2                 ; ¿hemos llegado a 16ms?
     CPFSEQ  contador_16ms
     GOTO BOTON                        ; si NO es 16ms vuelvo
 
     ; Si llegamos aquí, contador_16ms == 99
     BCF flag_16ms,1
-    CLRF    contador_16ms,F          ; reseteo segundos
+    CLRF    contador_16ms         ; reseteo segundos
 MS16
-    BTFSC   PORTB,0,ACCESS      ; si RB0=1 (no pulsado) salta
+    BTFSS   PORTB,0,ACCESS      ; si RB0=1 (no pulsado) salta
     CALL    NEXT_MODE
 
     ; ---- Botón izquierda (RB1) ----
-    BTFSC   PORTB,1,ACCESS
+    BTFSS   PORTB,1,ACCESS
     CALL    PREV_MODE
 
     ; ---- Botón select ---
-    BTFSC   PORTB,2,ACCESS
+    BTFSS   PORTB,2,ACCESS
     CALL    SELECT_MODE
 
 MS16Vuelta_sinpulsar
-    BTFSC   PORTB,0,ACCESS
+    BTFSS   PORTB,0,ACCESS
     GOTO    MS16Vuelta_sinpulsar
 
-    BTFSC   PORTB,1,ACCESS
+    BTFSS   PORTB,1,ACCESS
     GOTO    MS16Vuelta_sinpulsar
 
-    BTFSC   PORTB,2,ACCESS
+    BTFSS   PORTB,2,ACCESS
     GOTO    MS16Vuelta_sinpulsar
 MS16Vuelta
         BSF flag_16ms,1
@@ -103,7 +106,7 @@ MS16Vuelta
 
     ; Si llegamos aquí, contador_16ms == 99
     BCF flag_16ms,1
-    CLRF    contador_16ms,F          ; reseteo segundos
+    CLRF contador_16ms       ; reseteo segundos
     RETURN
     
 NEXT_MODE
@@ -132,7 +135,7 @@ SELECT_MODE
     
 UPDATE_LEDS
     ; Limpia solo RA2..RA0 (deja el resto de LATA igual)
-    MOVLW   b'11111000'
+    MOVLW   b'11000111'
     ANDWF   LATA, F, ACCESS
     ; MODE == 1 ?
     MOVF    mode, W, ACCESS
@@ -149,13 +152,13 @@ CHECK_M2
     CPFSEQ  mode, ACCESS
     GOTO    MODE3
     ; Leds = 110
-    BSF     LATA,3,ACCESS
+    BCF     LATA,3,ACCESS
     BSF     LATA,4,ACCESS
     BCF     LATA,5,ACCESS
     RETURN 
 MODE3
     ; Leds = 010
-    BCF     LATA,3,ACCESS
+    BSF     LATA,3,ACCESS
     BSF     LATA,4,ACCESS
     BCF     LATA,5,ACCESS
     RETURN
@@ -172,7 +175,7 @@ INIT_CONFIG
     BSF RCON,IPEN ;Se activan las high-priority
     MOVLW B'11000000'
     MOVWF INTCON3
-    BSF INTCON2,RBPU
+    BCF INTCON2,RBPU
     RETURN
 
 RESET_INTERRUPTS
@@ -207,6 +210,9 @@ BUCLE_10MS          ; cuenta 10ms
     MOVLW   .99                  ; ¿hemos llegado a 100 ticks?
     CPFSEQ  contador_10ms         ; ¿contador_10ms == 100?
     RETURN                        ; si NO es igual
+    
+        BTFSC flag_16ms,1,ACCESS	; contar 16
+    INCF    contador_16ms,F       ; contador_seg++
 
     ; Si llegamos aquí, contador_10ms == 100
     CLRF    contador_10ms         ; reseteo a 0
@@ -220,9 +226,6 @@ BUCLE_SEG           ; cuenta segundos
     MOVLW   .99                  ; ¿hemos llegado a 1000ms?
     CPFSEQ  contador_1s
     RETURN                        ; si NO es 100, salgo
-    
-    BTFSC flag_16ms	; contar 16
-    INCF    contador_16ms, F       ; contador_seg++
 
     ; Si llegamos aquí, contador_seg == 99
     CLRF    contador_1s          ; reseteo segundos
@@ -323,11 +326,11 @@ CALL RESET_INTERRUPTS
 
 LOOP
 
-    BTFSC   PORTB,0,ACCESS
+    BTFSS   PORTB,0,ACCESS
 	CALL BOTON
-    BTFSC   PORTB,1,ACCESS
+    BTFSS   PORTB,1,ACCESS
 	CALL BOTON
-    BTFSC   PORTB,2,ACCESS
+    BTFSS   PORTB,2,ACCESS
 	CALL BOTON
 
     
