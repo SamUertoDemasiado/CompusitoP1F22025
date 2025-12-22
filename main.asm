@@ -1,65 +1,129 @@
-LIST P=PIC18F4321 F=INHX32
+LIST P=PIC18F4321, F=INHX32
 #include <p18f4321.inc>
-CONFIG  OSC=HSPLL ; L?oscil.lador.
-CONFIG  PBADEN=DIG ; Volem que el PORTB sigui DIGital.
-CONFIG  WDT=OFF    ; Desactivem el WatchDog Timer.
-
-ORG	    0x0000
-GOTO	    MAIN
-ORG	    0x0008  ;Interrupts de alta prioridad
-GOTO	    HIGH_IRS ;Zona de interrupciones
-ORG	    0x0018
-RETFIE  FAST  
 
 ;--------------------------------
-;   AsignaciÃ³n de variables
+; CONFIGURATION
 ;--------------------------------
+CONFIG  OSC=HSPLL
+CONFIG  PBADEN=DIG
+CONFIG  WDT=OFF
+
+;--------------------------------
+; VARIABLES (RAM)
+;--------------------------------
+    CBLOCK 0x22         ; Start variables at 0x22
+        contador_10ms
+        contador_1s
+        decadas
+        baby            ; Flag
+        teenager        ; Flag
+        adult           ; Flag
+        dead            ; Flag
+        contador_1m
+        t0
+        t1
+        tact
+	bucle_green
+	bucle_yellow
+	bucle_red
+	current_colour
+	counter_alive ;contador que me mira si cambia de color por alimentaciÃ³n
+	which_table
+	rows_printed
+    ENDC
+
+Posicio_RAM EQU 0x81
+baby_table EQU 0x0100
+teen_table EQU 0x0110
+adult_table EQU 0x0120
+
+;--------------------------------
+; RESET VECTOR
+;--------------------------------
+ORG     0x0000
+    GOTO    MAIN
+
+;--------------------------------
+; HIGH PRIORITY INTERRUPT VECTOR
+;--------------------------------
+ORG     0x0008
+    GOTO    HIGH_IRS
+
+;--------------------------------
+; LOW PRIORITY INTERRUPT VECTOR
+;--------------------------------
+ORG     0x0018
+    RETFIE  FAST
+
+;--------------------------------
+; DATA TABLES (FLASH MEMORY)
+;--------------------------------
+    ORG baby_table
+    DB b'00000000', b'00000000'
+    DB b'00011000', b'00100100'
+    DB b'00100100', b'00011000'
+    DB b'00000000', b'00000000'
+    
+    
+
+   ORG teen_table
+   DB b'00000000', b'00111100'
+   DB b'01000010', b'01011010'
+   DB b'01000010', b'01000010'
+   DB b'00111100', b'00000000'
    
 
-contador_10ms	EQU 0x22  ; contador de 99 vueltas
-contador_1s    EQU 0x23  ; contador de 99 vueltas
-decadas		EQU 0x24  ; almacena las decadas 
-baby		EQU 0x25  ; Flag que indica estado baby
-teenager	EQU 0x26  ; Flag que indica estado teenager
-adult		EQU 0x27  ; Flag que indica estado adult
-dead		EQU 0x28  ; Flag que indica la muerte del tamagotchi
-contador_1m	EQU 0x29  ; contador de 59 vueltas
-t0		EQU 0X30 ; tiempo que el pmw ha de estar a 0
-t1		EQU 0X31 ; Tiempo que ha de estar a 1
-tact		EQU 0x32; tiempo actual del estado actual del pmw
-		
-Posicio_RAM EQU 0x81 ;en la posicion 0x81 de memoria 
+    ORG adult_table
+    DB b'01111110', b'10000001'
+    DB b'10100101', b'10100101'
+    DB b'10000001', b'10111101'
+    DB b'10000001', b'01111110'
 
+;--------------------------------
+; CODE
+;--------------------------------
 
+;--------------------------------
+; INITIALIZE PORTS AND VARIABLES
+;--------------------------------
 INIT_PORTS
-    ;PORTA Todo de salida; grid, servo, RandomGenerated, Menu[2..0]
-    MOVLW B'00000000' ;A7 nada, A6 nada, A5 menu 2, A4 menu 1, A3 menu 0, A2 RandomGenerated, A1 servo, A0 grid 
+    ;PORTA Output
+    MOVLW B'00000000'
     MOVWF TRISA, ACCESS
     BCF LATA,1,ACCESS
 
-    ;PORTB Todo de entrada; botones Left option, Right option, Select, PCI, ResultPulse, NewNumber
-    MOVLW B'11111111' ;B7 nada, B6 nada, B5 NewNumber, B4 ResultPulse, B3 PCI, B2 BtnSelect, B1 BtnLeftOption, B0 BtnRightOption
+    ;PORTB Input
+    MOVLW B'11111111'
     MOVWF TRISB, ACCESS
-    
-    ;PORTC Todo de salida; C7 nada, C6 nada, C5 nada, C4 nada, C3 RandomNumber0, C2 RandomNumber1, C1 RandomNumber2, C0 RandomNumber3
+
+    ;PORTC Output
     MOVLW B'00000000'
     MOVWF TRISC, ACCESS
-    ;PORTD Todo de salida; 7Seg
-    MOVLW B'00000000' ;D7 nada, D6 7Seg6, D5 7Seg5, D4 7Seg4, D3 7Seg3, D2 7Seg2, D1 7Seg1, D0 7Seg0
+    BCF LATC,4,ACCESS
+
+    ;PORTD Output
+    MOVLW B'00000000'
     MOVWF TRISD, ACCESS
-    
+
     CLRF contador_10ms,ACCESS
- CLRF contador_1s,ACCESS
- CLRF contador_1m,ACCESS
- CLRF t0,ACCESS
- CLRF t1,ACCESS
- CLRF tact,ACCESS
-BSF baby,ACCESS
-CLRF decadas,ACCESS
-BSF LATA,0,ACCESS
- BSF LATA,1 
-    RETURN
+    CLRF contador_1s,ACCESS
+    CLRF contador_1m,ACCESS
+    CLRF t0,ACCESS
+    CLRF t1,ACCESS
+    CLRF tact,ACCESS
+    BSF baby,ACCESS
+    CLRF decadas,ACCESS
+    CLRF current_colour,ACCESS
+    BSF LATA,0,ACCESS
+    BSF LATA,1
+    MOVLW .90
+    MOVWF counter_alive,ACCESS
+    CLRF which_table, ACCESS
+    MOVLW .8
+    MOVWF rows_printed,ACCESS
+
     
+    RETURN
 
 INIT_CONFIG
     CLRF TRISC
@@ -67,93 +131,81 @@ INIT_CONFIG
     MOVWF INTCON, ACCESS
     MOVLW B'10001000'
     MOVWF T0CON, ACCESS
-    BSF RCON,IPEN ;Se activan las high-priority
+    BSF RCON,IPEN
     MOVLW B'11010000'
     MOVWF INTCON3
-    
     RETURN
 
 RESET_INTERRUPTS
-    ;Tins = 4/40MHz = 100ns
-    ;0,1ms/100ns = 1k tics
-    ;Usamos el timer0 de 16 bits (2^16 = 65536)
-    ;65535 - 1000 = 64535
- 
-    MOVLW LOW(.64535) 
-    MOVWF TMR0L,ACCESS
-    MOVLW HIGH(.64535) 
+    ; 1ms / 100ns = 1000 ticks (Assuming logic, your math said 0.1ms but calc implies 1000)
+    ; 65536 - 1000 = 64536
+    MOVLW HIGH(.64535)
     MOVWF TMR0H,ACCESS
-    
-    RETURN 
+    MOVLW LOW(.64535)
+    MOVWF TMR0L,ACCESS
+    RETURN
 
 HIGH_IRS
-    ;La interrupcion saltara cada 10ms
     BTFSC INTCON, TMR0IF,ACCESS
     CALL TMR0_INTERRUPT
     RETFIE FAST
 
 TMR0_INTERRUPT
+    BSF PORTC,0
+    BCF PORTC,0
     CALL RESET_INTERRUPTS
-    BCF INTCON, TMR0IF,ACCESS ;es el bit 2 del INTCON
+    BCF INTCON, TMR0IF,ACCESS
     CALL BUCLE_10MS
     CALL PMW
     RETURN
 
-BUCLE_10MS          ; cuenta 10ms
-    INCF    contador_10ms, F      ; contador_10ms++
-    
-    MOVLW   .99                  ; ¿hemos llegado a 100 ticks?
-    CPFSEQ  contador_10ms         ; ¿contador_10ms == 100?
-    RETURN                        ; si NO es igual
-
-    ; Si llegamos aquí, contador_10ms == 100
-    CLRF    contador_10ms         ; reseteo a 0
-    CALL    BUCLE_SEG             ; acumulo 10ms
+BUCLE_10MS           ; cuenta 10ms
+    INCF    contador_10ms, F
+    MOVLW   .99
+    CPFSEQ  contador_10ms
+    RETURN
+    ; Si llegamos aqui, contador_10ms == 100
+    CLRF    contador_10ms
+    CALL    BUCLE_SEG
     RETURN
 
-BUCLE_SEG           ; cuenta segundos
-    INCF    contador_1s, F       ; contador_seg++
-
-    MOVLW   .99                  ; ¿hemos llegado a 1000ms?
+BUCLE_SEG            ; cuenta segundos
+    INCF    contador_1s, F
+    MOVLW   .99
     CPFSEQ  contador_1s
-    RETURN                        ; si NO es 100, salgo
-
-    ; Si llegamos aquí, contador_seg == 99
-    CLRF    contador_1s          ; reseteo segundos
-    CALL    BUCLE_MIN             ; acumulo 1 minuto
+    RETURN
+    ; Si llegamos aqui, contador_seg == 100
+    CLRF    contador_1s
+    CALL    BUCLE_MIN
     RETURN
 
-BUCLE_MIN           ; cuenta minutos
-    INCF    contador_1m, F       ; contador_min++
-
-    MOVLW   .59                    ; hemos llegado a 1min?
+BUCLE_MIN            ; cuenta minutos
+    INCF    contador_1m, F
+    MOVLW   .59
     CPFSEQ  contador_1m
-    RETURN                        ; si aún no he llegado, salgo
-
-    CALL    RESET_BUCLES          ;llegada a la decada
     RETURN
-    
+    CALL    RESET_BUCLES
+    RETURN
+
 RESET_BUCLES
     INCF decadas,F
     CLRF contador_1m
     CALL ENVEJECER
     RETURN
-    
 
-ENVEJECER    
-
+ENVEJECER
     MOVLW .3
-    CPFSLT decadas,ACCESS ;AquÃ­ cambio a teenager
+    CPFSLT decadas,ACCESS
     BCF baby,ACCESS
     CPFSLT decadas,ACCESS
     BSF teenager,ACCESS
-    
+
     MOVLW .6
-    CPFSLT decadas,ACCESS ;AquÃ­ cambio a adult
+    CPFSLT decadas,ACCESS
     BCF teenager,ACCESS
     CPFSLT decadas,ACCESS
     BSF adult,ACCESS
-    
+
     MOVLW .10
     CPFSLT decadas,ACCESS
     BCF adult,ACCESS
@@ -162,15 +214,13 @@ ENVEJECER
     CPFSLT decadas,ACCESS
     CALL IS_DEAD
     RETURN
-    
+
 IS_DEAD
     GOTO IS_DEAD
     RETURN
-    
+
 PMW
-
     INCF tact, F
-
     ; t1 = 2*decadas + 4
     MOVF    decadas, W
     MULLW   .2
@@ -178,48 +228,224 @@ PMW
     ADDLW .4
     MOVWF t1
 
-    MOVLW   .200      ; periodo total = 200 ticks = 20ms
+    MOVLW   .200
     MOVWF   t0
     MOVF    t1, W
     SUBWF   t0, F     ; t0 = 200 - t1
 
     MOVF t1, W
-    BTFSS PORTA,1,ACCESS ; si RA1=1 ? usa t1, si no ? t0
+    BTFSS PORTA,1,ACCESS
     MOVF t0, W
 
-    CPFSLT tact       ; si tact < W ? salta BTG/CLRF
-    BTG LATA,1        ; si tact >= W ? toggle
+    CPFSLT tact
+    BTG LATA,1
     CPFSLT tact
     CLRF tact
     RETURN
 
-FIRE ;FUNCION DEBUG
+;----------------------------------------------
+; MATRIX
+;----------------------------------------------
 
-MOVLW   b'00000000'
-MOVWF   TRISD
-MOVLW   b'10101010'
-MOVWF   PORTD
+CODE_ONE
+    BSF LATC,4,ACCESS
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    BCF LATC, 4, ACCESS
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    RETURN
+    
+CODE_ZERO
+    BSF LATC,4,ACCESS
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    BCF LATC, 4, ACCESS
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    RETURN
+    
+    
+COLOR_ON
+    CALL CODE_ONE
+    CALL CODE_ONE
+    CALL CODE_ONE
+    CALL CODE_ONE
+    CALL CODE_ONE
+    CALL CODE_ONE
+    CALL CODE_ONE
+    CALL CODE_ONE
+    RETURN
 
-GOTO FIRE
+COLOR_OFF
+    CALL CODE_ZERO
+    CALL CODE_ZERO
+    CALL CODE_ZERO
+    CALL CODE_ZERO
+    CALL CODE_ZERO
+    CALL CODE_ZERO
+    CALL CODE_ZERO
+    CALL CODE_ZERO
+    RETURN    
+
+PAINT_GREEN
+    ;CALL BIT_COLOUR_ON
+    ;CALL BIT_COLOUR_OFF
+    ;CALL BIT_COLOUR_OFF
+    CALL COLOR_ON
+    CALL COLOR_OFF
+    CALL COLOR_OFF
+    RETURN
+
+PAINT_RED
+    CALL COLOR_OFF
+    CALL COLOR_ON
+    CALL COLOR_OFF
+    RETURN
+
+PAINT_YELLOW
+    CALL COLOR_ON
+    CALL COLOR_ON
+    CALL COLOR_OFF
+    RETURN
+;------------------------------
+; ACTUALIZAR COLOR
+;------------------------------
 
 
-MAIN	  
+PRINT_SHAPE
+    BTFSC TABLAT, 0
+    CALL PAINT_GREEN
+    BTFSS TABLAT, 0
+    CALL PAINT_RED
+    BTFSC TABLAT, 1
+    CALL PAINT_GREEN
+    BTFSS TABLAT, 1
+    CALL PAINT_RED
+    BTFSC TABLAT, 2
+    CALL PAINT_GREEN
+    BTFSS TABLAT, 2
+    CALL PAINT_RED
+    BTFSC TABLAT, 3
+    CALL PAINT_GREEN
+    BTFSS TABLAT, 3
+    CALL PAINT_RED
+    BTFSC TABLAT, 4
+    CALL PAINT_GREEN
+    BTFSS TABLAT, 4
+    CALL PAINT_RED
+    BTFSC TABLAT, 5
+    CALL PAINT_GREEN
+    BTFSS TABLAT, 5
+    CALL PAINT_RED
+    BTFSC TABLAT, 6
+    CALL PAINT_GREEN
+    BTFSS TABLAT, 6
+    CALL PAINT_RED
+    BTFSC TABLAT, 7
+    CALL PAINT_GREEN
+    BTFSS TABLAT, 7
+    CALL PAINT_RED
+    TBLRD*+
+    DECFSZ rows_printed, ACCESS
+    CALL PRINT_SHAPE
+    RETURN
 
-;CALL FIRE
-CALL INIT_PORTS
-CALL INIT_CONFIG
-CALL RESET_INTERRUPTS
+      
+INIT_TABLE
+    MOVLW .0; Load TBLPTR with the base
+    MOVWF TBLPTRU ; address of the word
+    MOVLW .1
+    MOVWF TBLPTRH
+    MOVLW which_table
+    MOVWF TBLPTRL 
+    RETURN
 
+GROW
+    MOVLW .16
+    MOVWF which_table,ACCESS
+    RETURN
+    
+GROW2
+    MOVLW .32
+    MOVWF which_table,ACCESS
+    RETURN
+    
+START_MATRIX
+    BCF INTCON, 5
+    BTFSC baby,ACCESS
+    CLRF which_table   
+    
+    BTFSC teenager, ACCESS
+    CALL GROW
+    
+    BTFSC adult,ACCESS
+    CALL GROW2    
+    
+    MOVWF which_table,ACCESS
+    
+    CALL INIT_TABLE
+    
+    MOVLW .8
+    MOVWF rows_printed,ACCESS
+    CALL PRINT_SHAPE
+    BSF INTCON, 5
+    RETURN
+  
+
+    
+    
+    
+;----------------------------------   
+;----------------------------------
+FIRE ; FUNCION DEBUG
+    MOVLW   b'00000000'
+    MOVWF   TRISD
+    MOVLW   b'10101010'
+    MOVWF   PORTD
+    GOTO    FIRE
+
+MAIN
+    ;CALL FIRE
+    CALL INIT_PORTS
+    CALL INIT_CONFIG
+    CALL RESET_INTERRUPTS
+    
 LOOP
-BSF LATA,2,0
+    BSF LATA,2,0
+    CALL START_MATRIX
+    GOTO LOOP
 
-GOTO LOOP
-END
-
-
-;Las prioridades high son de timer
-;Las proridades low son para perifericos
-    
-
-
-    
+    END
