@@ -3,6 +3,7 @@ LIST P=PIC18F4321 F=INHX32
 CONFIG  OSC=HSPLL ; L?oscil.lador.
 CONFIG  PBADEN=DIG ; Volem que el PORTB sigui DIGital.
 CONFIG  WDT=OFF    ; Desactivem el WatchDog Timer.
+CONFIG LVP=OFF
 
 ORG	    0x0000
 GOTO	    MAIN
@@ -26,11 +27,30 @@ contador_1m	EQU 0x29  ; contador de 59 vueltas
 flag_16ms		EQU 0X2A ; flag contar 16ms
 contador_16ms	EQU 0X2B ; counter 16ms
 mode		EQU 0x2C ; menu del juego
+random_number         EQU 0x2D ; numero aleatorio 
+flag_game		EQU 0x2E 
+contador_game	EQU 0x2F
 t0		EQU 0X30 ; tiempo que el pmw ha de estar a 0
 t1		EQU 0X31 ; Tiempo que ha de estar a 1
 tact		EQU 0x32; tiempo actual del estado actual del pmw
+comida		EQU 0x33 ;contador de comida
+flag_rpulse		EQU 0x34
+contador_rpulse	EQU 0x35
 		
 Posicio_RAM EQU 0x81 ;en la posicion 0x81 de memoria 
+    
+DIGITO7SEG
+    ADDWF   PCL, F
+    RETLW   0x7D    ; 0
+    RETLW   0x30    ; 1
+    RETLW   0x6E    ; 2
+    RETLW   0x7A    ; 3
+    RETLW   0x1B    ; 4
+    RETLW   0x5B    ; 5
+    RETLW   0x5F    ; 6
+    RETLW   0x72    ; 7
+    RETLW   0x7F    ; 8
+    RETLW   0x73    ; 9
     
 
 INIT_PORTS
@@ -50,6 +70,9 @@ INIT_PORTS
     MOVLW B'00000000' ;D7 nada, D6 7Seg6, D5 7Seg5, D4 7Seg4, D3 7Seg3, D2 7Seg2, D1 7Seg1, D0 7Seg0
     MOVWF TRISD, ACCESS
     
+    CLRF contador_game
+    CLRF flag_game
+
     CLRF contador_10ms,ACCESS
     CLRF contador_1s,ACCESS
     CLRF contador_1m,ACCESS
@@ -58,18 +81,19 @@ INIT_PORTS
     CLRF tact,ACCESS
     BSF baby,ACCESS
     CLRF decadas,ACCESS
-    BSF LATA,1
     BCF flag_16ms,0
     MOVLW .1
     MOVWF mode,ACCESS
     CALL UPDATE_LEDS
+    CLRF LATD
+    BCF   LATA,2,0
 
     RETURN
 
 BOTON
     BSF flag_16ms,1
 
-    MOVLW   .2                 ; ¿hemos llegado a 16ms?
+    MOVLW   .160                 ; ¿hemos llegado a 16ms?
     CPFSEQ  contador_16ms
     GOTO BOTON                        ; si NO es 16ms vuelvo
 
@@ -100,7 +124,7 @@ MS16Vuelta_sinpulsar
 MS16Vuelta
         BSF flag_16ms,1
 
-    MOVLW   .159                 ; ¿hemos llegado a 16ms?
+    MOVLW   .160                 ; ¿hemos llegado a 16ms?
     CPFSEQ  contador_16ms
     GOTO MS16Vuelta                        ; si NO es 16ms vuelvo
 
@@ -130,8 +154,86 @@ PM_OK
     CALL    UPDATE_LEDS
     RETURN
     
-SELECT_MODE
+SELECT_MODE  
+    MOVLW   .1
+    CPFSEQ  mode, ACCESS
+    GOTO SELECT_MODE_2
+    GOTO GAME
+
+SELECT_MODE_2
+    MOVLW   .2
+    CPFSEQ  mode, ACCESS
+    ;GOTO ALIMENTAR
+    ;GOTO REINICIAR
+    RETURN; eliminar
     RETURN
+
+GAME_WAIT
+    ;poner numeros en LATD
+    
+     BSF flag_game,1
+     CLRF contador_game,ACCESS
+     CLRF LATD
+    MOVF    random_number, W, ACCESS
+    CALL    DIGITO7SEG
+    MOVWF   LATD, ACCESS
+    BCF	LATA,2,0
+    
+GAME_WAIT_S
+    
+    MOVLW   .200 ;espera de 2s, para que se pueda ver por el 7seg y pulsar * si hace falta
+    CPFSEQ  contador_game,ACCESS
+    GOTO GAME_WAIT_S            
+    
+    BCF flag_game,1
+    CLRF contador_game,ACCESS
+    
+GAME
+     CLRF random_number,ACCESS
+    ; numero aleatorio
+    MOVF   contador_10ms, W, ACCESS
+    ANDLW  0x0F
+    MOVWF  random_number, ACCESS
+    MOVLW .9
+    CPFSGT random_number, ACCESS   ; si random_number < 10, OK
+    GOTO  RN_OK
+    MOVLW .9                       ; si era 10..15, le restas 9
+    SUBWF random_number, F, ACCESS
+
+RN_OK
+    ;poner numeros en LATC
+    MOVF   random_number, W, ACCESS
+    MOVWF  LATC, ACCESS
+    BSF LATA,2,ACCESS
+
+GAME_NEW_NUMBER
+    BTFSS PORTB,4,0;rpulse
+    GOTO FIN_GAME
+    BTFSC PORTB,5,0; newnumber
+    GOTO GAME_WAIT
+    GOTO GAME_NEW_NUMBER
+    
+FIN_GAME
+    BCF	LATA,2,0
+    BSF flag_rpulse,1
+    BTFSC PORTB,4,0;rpulse
+    GOTO FIN_GAME
+    
+    
+    MOVLW   .14 ; si rpulse
+    CPFSGT  contador_rpulse,ACCESS
+    GOTO REINICIO_GAME ;x!>1 todo mal
+
+MAS_COMIDA
+    MOVLW   .5
+    CPFSEQ  comida, ACCESS   ; ¿contador == 5?
+    INCF    comida, F        ; si NO es 5 ? contador++
+
+REINICIO_GAME
+    BCF flag_rpulse,1 
+    CLRF contador_rpulse,ACCESS 
+    CLRF LATD
+    GOTO LOOP
     
 UPDATE_LEDS
     ; Limpia solo RA2..RA0 (deja el resto de LATA igual)
@@ -142,25 +244,25 @@ UPDATE_LEDS
     MOVLW   .1
     CPFSEQ  mode, ACCESS
     GOTO    CHECK_M2
-    ; Leds = 100
-    BSF     LATA,3,ACCESS
-    BCF     LATA,4,ACCESS
-    BCF     LATA,5,ACCESS
+    ; Leds = 011  cian, opcion jugar
+    BCF     LATA,3,ACCESS
+    BSF     LATA,4,ACCESS
+    BSF     LATA,5,ACCESS
     RETURN
 CHECK_M2
     MOVLW   .2
     CPFSEQ  mode, ACCESS
     GOTO    MODE3
-    ; Leds = 110
-    BCF     LATA,3,ACCESS
-    BSF     LATA,4,ACCESS
-    BCF     LATA,5,ACCESS
+    ; Leds = 101 ; magenta opc 2
+    BSF     LATA,3,ACCESS
+    BCF     LATA,4,ACCESS
+    BSF     LATA,5,ACCESS
     RETURN 
 MODE3
-    ; Leds = 010
+    ; Leds = 111 blanco opc 3
     BSF     LATA,3,ACCESS
     BSF     LATA,4,ACCESS
-    BCF     LATA,5,ACCESS
+    BSF     LATA,5,ACCESS
     RETURN
     
     
@@ -182,17 +284,17 @@ RESET_INTERRUPTS
     ;Tins = 4/40MHz = 100ns
     ;0,1ms/100ns = 1k tics
     ;Usamos el timer0 de 16 bits (2^16 = 65536)
-    ;65535 - 1000 = 64535
+    ;65535 - 1000 = 64536 paradas cada 1ms
  
-    MOVLW LOW(.64535) 
+    MOVLW LOW(.64536)
     MOVWF TMR0L,ACCESS
-    MOVLW HIGH(.64535) 
+    MOVLW HIGH(.64536) 
     MOVWF TMR0H,ACCESS
     
     RETURN 
 
 HIGH_IRS
-    ;La interrupcion saltara cada 10ms
+    ;La interrupcion saltara cada 1ms
     BTFSC INTCON, TMR0IF,ACCESS
     CALL TMR0_INTERRUPT
     RETFIE FAST
@@ -204,47 +306,53 @@ TMR0_INTERRUPT
     CALL PMW
     RETURN
 
-BUCLE_10MS          ; cuenta 10ms
-    INCF    contador_10ms, F      ; contador_10ms++
+BUCLE_10MS          ; cuenta 10ms, 0,1ms
+    INCF    contador_10ms, F,ACCESS      ; contador_10ms++
     
-    MOVLW   .99                  ; ¿hemos llegado a 100 ticks?
-    CPFSEQ  contador_10ms         ; ¿contador_10ms == 100?
+    BTFSC flag_16ms,1,ACCESS	; contar 16ms
+    INCF    contador_16ms,F,ACCESS         ; contador_seg++
+    
+        BTFSC flag_rpulse,1,ACCESS	; contar ms de game
+    INCF    contador_rpulse,F,ACCESS  
+    
+    MOVLW   .100                  ; ¿hemos llegado a 10 ticks?
+    CPFSEQ  contador_10ms,ACCESS           ; ¿contador_10ms == 10?
     RETURN                        ; si NO es igual
-    
-        BTFSC flag_16ms,1,ACCESS	; contar 16
-    INCF    contador_16ms,F       ; contador_seg++
-
-    ; Si llegamos aquí, contador_10ms == 100
-    CLRF    contador_10ms         ; reseteo a 0
+       
+    ; Si llegamos aquí, contador_10ms == 10
+    CLRF    contador_10ms,ACCESS           ; reseteo a 0
     CALL    BUCLE_SEG             ; acumulo 10ms
     
     RETURN
 
-BUCLE_SEG           ; cuenta segundos
-    INCF    contador_1s, F       ; contador_seg++
-
-    MOVLW   .99                  ; ¿hemos llegado a 1000ms?
-    CPFSEQ  contador_1s
+BUCLE_SEG           ; cuenta segundos, 10ms
+    INCF    contador_1s, F,ACCESS         ; contador_seg++
+    
+    BTFSC flag_game,1,ACCESS	; contar ms de game
+    INCF    contador_game,F,ACCESS  
+    
+    MOVLW   .100                  ; ¿hemos llegado a 1s?(1000ms)
+    CPFSEQ  contador_1s,ACCESS  
     RETURN                        ; si NO es 100, salgo
-
-    ; Si llegamos aquí, contador_seg == 99
-    CLRF    contador_1s          ; reseteo segundos
-    CALL    BUCLE_MIN             ; acumulo 1 minuto
+    
+    ; Si llegamos aquí, contador_seg == 100
+    CLRF    contador_1s,ACCESS           ; reseteo segundos
+    CALL    BUCLE_MIN             ; acumulo 1s
     RETURN
 
 BUCLE_MIN           ; cuenta minutos
-    INCF    contador_1m, F       ; contador_min++
-
-    MOVLW   .59                    ; hemos llegado a 1min?
-    CPFSEQ  contador_1m
+    INCF    contador_1m, F,ACCESS         ; contador_min++
+   
+    MOVLW   .60                    ; hemos llegado a 1min?
+    CPFSEQ  contador_1m,ACCESS  
     RETURN                        ; si aún no he llegado, salgo
 
     CALL    RESET_BUCLES          ;llegada a la decada
     RETURN
     
 RESET_BUCLES
-    INCF decadas,F
-    CLRF contador_1m
+    INCF decadas,F,ACCESS  
+    CLRF contador_1m,ACCESS  
     CALL ENVEJECER
     RETURN
     
@@ -273,21 +381,21 @@ ENVEJECER
     RETURN
     
 IS_DEAD
-    GOTO IS_DEAD
+    MOVLW .10
+    MOVWF decadas, ACCESS
     RETURN
-    
 PMW
 
     INCF tact, F
 
-    ; t1 = 2*decadas + 4
+    ; t1 = 2*decadas + 5
     MOVF    decadas, W
     MULLW   .2
     MOVF PRODL, W
-    ADDLW .4
+    ADDLW .5
     MOVWF t1
 
-    MOVLW   .200      ; periodo total = 200 ticks = 20ms
+    MOVLW   .200      ; periodo total = 200 ticks * 0,1ms = 20ms
     MOVWF   t0
     MOVF    t1, W
     SUBWF   t0, F     ; t0 = 200 - t1
@@ -302,21 +410,6 @@ PMW
     CLRF tact
     RETURN
 
-
-
-
-    
-    
-FIRE ;FUNCION DEBUG
-
-MOVLW   b'00000000'
-MOVWF   TRISD
-MOVLW   b'10101010'
-MOVWF   PORTD
-
-GOTO FIRE
-
-
 MAIN	  
 
 ;CALL FIRE
@@ -325,7 +418,6 @@ CALL INIT_CONFIG
 CALL RESET_INTERRUPTS
 
 LOOP
-
     BTFSS   PORTB,0,ACCESS
 	CALL BOTON
     BTFSS   PORTB,1,ACCESS
