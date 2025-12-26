@@ -5,6 +5,9 @@ CONFIG  PBADEN=DIG ; Volem que el PORTB sigui DIGital.
 CONFIG  WDT=OFF    ; Desactivem el WatchDog Timer.
 CONFIG LVP=OFF
 
+
+TAULA7S		EQU 0x03A; del 0x3A a 0x41
+
 ORG	    0x0000
 GOTO	    MAIN
 ORG	    0x0008  ;Interrupts de alta prioridad
@@ -14,45 +17,69 @@ RETFIE FAST
 ;--------------------------------
 ;   Asignaci√≥n de variables
 ;--------------------------------
+ORG TAULA7S
+   ;Segments del 0, segments del 1
+DB 0x7D, 0x30
+;Segments del 2, segments del 3
+DB 0x6E, 0x7A
+;Segments del 4, segments del 5
+DB 0X33, 0x5B
+;Segments del 6, segments del 7
+DB 0x5F, 0x70
+;Segments del 8, segments del 9
+DB 0x7F, 0x73   
     
-    
-contador_10ms	EQU 0x22  ; contador de 99 vueltas
-contador_1s    EQU 0x23  ; contador de 99 vueltas
-decadas		EQU 0x24  ; almacena las decadas 
-baby		EQU 0x25  ; Flag que indica estado baby
-teenager	EQU 0x26  ; Flag que indica estado teenager
-adult		EQU 0x27  ; Flag que indica estado adult
-dead		EQU 0x28  ; Flag que indica la muerte del tamagotchi
-contador_1m	EQU 0x29  ; contador de 59 vueltas
-flag_16ms		EQU 0X2A ; flag contar 16ms
-contador_16ms	EQU 0X2B ; counter 16ms
-mode		EQU 0x2C ; menu del juego
-random_number         EQU 0x2D ; numero aleatorio 
-flag_game		EQU 0x2E 
-contador_game	EQU 0x2F
-t0		EQU 0X30 ; tiempo que el pmw ha de estar a 0
-t1		EQU 0X31 ; Tiempo que ha de estar a 1
-tact		EQU 0x32; tiempo actual del estado actual del pmw
-comida		EQU 0x33 ;contador de comida
-flag_rpulse		EQU 0x34
-contador_rpulse	EQU 0x35
-		
-Posicio_RAM EQU 0x81 ;en la posicion 0x81 de memoria 
-    
-DIGITO7SEG
-    ADDWF   PCL, F
-    RETLW   0x7D    ; 0
-    RETLW   0x30    ; 1
-    RETLW   0x6E    ; 2
-    RETLW   0x7A    ; 3
-    RETLW   0x1B    ; 4
-    RETLW   0x5B    ; 5
-    RETLW   0x5F    ; 6
-    RETLW   0x72    ; 7
-    RETLW   0x7F    ; 8
-    RETLW   0x73    ; 9
-    
+contador_10ms	EQU 0x022  ; contador de 99 vueltas
+contador_1s    EQU 0x023  ; contador de 99 vueltas
+decadas		EQU 0x024  ; almacena las decadas 
+baby		EQU 0x025  ; Flag que indica estado baby
+teenager	EQU 0x026  ; Flag que indica estado teenager
+adult		EQU 0x027  ; Flag que indica estado adult
+dead		EQU 0x028  ; Flag que indica la muerte del tamagotchi
+contador_1m	EQU 0x029  ; contador de 59 vueltas
+flag_16ms		EQU 0X02A ; flag contar 16ms
+contador_16ms	EQU 0X02B ; counter 16ms
+mode		EQU 0x02C ; menu del juego
+random_number         EQU 0x02D ; numero aleatorio 
+flag_game		EQU 0x02E 
+contador_game	EQU 0x02F
+t0		EQU 0X030 ; tiempo que el pmw ha de estar a 0
+t1		EQU 0X031 ; Tiempo que ha de estar a 1
+tact		EQU 0x032; tiempo actual del estado actual del pmw
+comida		EQU 0x033 ;contador de comida
+flag_rpulse		EQU 0x034
+contador_rpulse	EQU 0x035
+random_seed	EQU 0x036
+espera_random	EQU 0x037
+espera_random_counter EQU 0x038
+ espera_random_base EQU 0x039
 
+Posicio_RAM EQU 0x081 ;en la posicion 0x81 de memoria 
+ 
+INIT_CONFIG
+    CLRF TRISC
+    MOVLW B'11100000'
+    MOVWF INTCON, ACCESS
+    MOVLW B'10001000'
+    MOVWF T0CON, ACCESS
+    BSF RCON,IPEN ;Se activan las high-priority
+    MOVLW B'11000000'
+    MOVWF INTCON3
+    BCF INTCON2,RBPU
+    RETURN
+
+RESET_INTERRUPTS
+    ;Tins = 4/40MHz = 100ns
+    ;0,1ms/100ns = 1k tics
+    ;Usamos el timer0 de 16 bits (2^16 = 65536)
+    ;65535 - 1000 = 64536 paradas cada 1ms
+ 
+    MOVLW LOW(.64536)
+    MOVWF TMR0L,ACCESS
+    MOVLW HIGH(.64536) 
+    MOVWF TMR0H,ACCESS
+    
+    RETURN 
 INIT_PORTS
     ;PORTA Todo de salida; grid, servo, RandomGenerated, Menu[2..0]
     MOVLW B'00000000' ;A7 nada, A6 nada, A5 menu 2, A4 menu 1, A3 menu 0, A2 RandomGenerated, A1 servo, A0 grid 
@@ -69,10 +96,10 @@ INIT_PORTS
     ;PORTD Todo de salida; 7Seg
     MOVLW B'00000000' ;D7 nada, D6 7Seg6, D5 7Seg5, D4 7Seg4, D3 7Seg3, D2 7Seg2, D1 7Seg1, D0 7Seg0
     MOVWF TRISD, ACCESS
-    
+    CLRF espera_random_base
     CLRF contador_game
     CLRF flag_game
-
+    CLRF espera_random_counter
     CLRF contador_10ms,ACCESS
     CLRF contador_1s,ACCESS
     CLRF contador_1m,ACCESS
@@ -86,8 +113,11 @@ INIT_PORTS
     MOVWF mode,ACCESS
     CALL UPDATE_LEDS
     CLRF LATD
-    BCF   LATA,2,0
-
+    BSF   LATA,2,0
+    
+    MOVLW TAULA7S
+    MOVWF TBLPTRL
+    CLRF TBLPTRH
     RETURN
 
 BOTON
@@ -168,53 +198,79 @@ SELECT_MODE_2
     RETURN; eliminar
     RETURN
 
-GAME_WAIT
-    ;poner numeros en LATD
+
+GAME ;poner el numero en latc y latd
+	;aleatoriedad
+  MOVLW .3
+  ADDWF espera_random_base,F,ACCESS
+   MOVF espera_random_base,W,ACCESS
+  MOVWF espera_random
+  MOVF	random_seed,W,ACCESS
+  ADDWF  espera_random,F,0
+ MOVF	random_number,W,ACCESS
+  ADDWF  espera_random,F,0
+ MOVF	contador_10ms,W,ACCESS
+  ADDWF  espera_random,F,0
+;fin aleatoriedad printar el numero
+GAME_TU_MADRE
+CLRF espera_random_counter,ACCESS  
+GAME_ESPERA_3 ;espera aleatoria para el siguiente numero
+  MOVF    espera_random,W,ACCESS
+  CPFSEQ  espera_random_counter,ACCESS
+  GOTO GAME_ESPERA_3
     
-     BSF flag_game,1
-     CLRF contador_game,ACCESS
-     CLRF LATD
-    MOVF    random_number, W, ACCESS
-    CALL    DIGITO7SEG
-    MOVWF   LATD, ACCESS
-    BCF	LATA,2,0
-    
-GAME_WAIT_S
-    
-    MOVLW   .200 ;espera de 2s, para que se pueda ver por el 7seg y pulsar * si hace falta
+  MOVF random_seed,W,ACCESS
+  CPFSEQ  random_number,ACCESS
+  GOTO CONSEGUIDO
+  GOTO GAME_TU_MADRE
+CONSEGUIDO
+  MOVFF  random_seed,random_number
+  MOVFF  random_number,LATC
+  CLRF LATD
+  CLRF TBLPTRH
+  CLRF TBLPTRU
+  MOVLW TAULA7S
+  MOVWF TBLPTRL
+  MOVF    random_number, W, ACCESS
+  ADDWF  TBLPTRL,F,0
+  TBLRD*
+  MOVFF TABLAT,LATD 
+  
+  BSF flag_game,1
+  CLRF contador_game,ACCESS
+  
+GAME_ESPERA_1 ;(espera visual)
+    MOVLW   .100 ;para terminated
     CPFSEQ  contador_game,ACCESS
-    GOTO GAME_WAIT_S            
+    GOTO GAME_ESPERA_1
     
-    BCF flag_game,1
-    CLRF contador_game,ACCESS
+    BCF	LATA,2,0 ; cambiamos al estado 2
+    CLRF LATD
+GAME_ESPERA_2 ;espera parpadeo, aviso de que el numero se va a enviar
+    MOVLW   .110
+    CPFSEQ  contador_game,ACCESS
+    GOTO GAME_ESPERA_2
     
-GAME
-     CLRF random_number,ACCESS
-    ; numero aleatorio
-    MOVF   contador_10ms, W, ACCESS
-    ANDLW  0x0F
-    MOVWF  random_number, ACCESS
-    MOVLW .9
-    CPFSGT random_number, ACCESS   ; si random_number < 10, OK
-    GOTO  RN_OK
-    MOVLW .9                       ; si era 10..15, le restas 9
-    SUBWF random_number, F, ACCESS
-
-RN_OK
-    ;poner numeros en LATC
-    MOVF   random_number, W, ACCESS
-    MOVWF  LATC, ACCESS
-    BSF LATA,2,ACCESS
-
+    CLRF espera_random_counter,ACCESS
+    
+    BSF	LATA,2,0 ; cambiamos al estado 3
 GAME_NEW_NUMBER
     BTFSS PORTB,4,0;rpulse
     GOTO FIN_GAME
     BTFSC PORTB,5,0; newnumber
     GOTO GAME_WAIT
     GOTO GAME_NEW_NUMBER
+GAME_WAIT; mantener los datos 1 tiempo
+      BSF flag_game,1
+  CLRF contador_game,ACCESS
+GAME_WAIT_1
+    MOVLW   .3
+    CPFSEQ  contador_game,ACCESS
+    GOTO GAME_WAIT_1
+    GOTO GAME
     
 FIN_GAME
-    BCF	LATA,2,0
+    BSF	LATA,2,0
     BSF flag_rpulse,1
     BTFSC PORTB,4,0;rpulse
     GOTO FIN_GAME
@@ -230,9 +286,11 @@ MAS_COMIDA
     INCF    comida, F        ; si NO es 5 ? contador++
 
 REINICIO_GAME
+          BCF flag_game,1
     BCF flag_rpulse,1 
     CLRF contador_rpulse,ACCESS 
     CLRF LATD
+        CLRF espera_random_base,ACCESS
     GOTO LOOP
     
 UPDATE_LEDS
@@ -268,30 +326,7 @@ MODE3
     
     
     
-INIT_CONFIG
-    CLRF TRISC
-    MOVLW B'11100000'
-    MOVWF INTCON, ACCESS
-    MOVLW B'10001000'
-    MOVWF T0CON, ACCESS
-    BSF RCON,IPEN ;Se activan las high-priority
-    MOVLW B'11000000'
-    MOVWF INTCON3
-    BCF INTCON2,RBPU
-    RETURN
 
-RESET_INTERRUPTS
-    ;Tins = 4/40MHz = 100ns
-    ;0,1ms/100ns = 1k tics
-    ;Usamos el timer0 de 16 bits (2^16 = 65536)
-    ;65535 - 1000 = 64536 paradas cada 1ms
- 
-    MOVLW LOW(.64536)
-    MOVWF TMR0L,ACCESS
-    MOVLW HIGH(.64536) 
-    MOVWF TMR0H,ACCESS
-    
-    RETURN 
 
 HIGH_IRS
     ;La interrupcion saltara cada 1ms
@@ -307,13 +342,21 @@ TMR0_INTERRUPT
     RETURN
 
 BUCLE_10MS          ; cuenta 10ms, 0,1ms
-    INCF    contador_10ms, F,ACCESS      ; contador_10ms++
+    INCF    contador_10ms, F,ACCESS      ; contador_10ms++    
+    
+    INCF    espera_random_counter,F,ACCESS  ;contador numero random
+
     
     BTFSC flag_16ms,1,ACCESS	; contar 16ms
     INCF    contador_16ms,F,ACCESS         ; contador_seg++
     
         BTFSC flag_rpulse,1,ACCESS	; contar ms de game
     INCF    contador_rpulse,F,ACCESS  
+    
+    INCF random_seed,F,ACCESS
+    MOVLW   .10                  ; øhemos llegado a 10 ticks?
+    CPFSLT  random_seed,ACCESS           ; øcontador_10ms == 10?
+    CLRF      random_seed,ACCESS
     
     MOVLW   .100                  ; øhemos llegado a 10 ticks?
     CPFSEQ  contador_10ms,ACCESS           ; øcontador_10ms == 10?
@@ -343,7 +386,7 @@ BUCLE_SEG           ; cuenta segundos, 10ms
 BUCLE_MIN           ; cuenta minutos
     INCF    contador_1m, F,ACCESS         ; contador_min++
    
-    MOVLW   .60                    ; hemos llegado a 1min?
+    MOVLW   .2                ; hemos llegado a 1min?
     CPFSEQ  contador_1m,ACCESS  
     RETURN                        ; si a˙n no he llegado, salgo
 
@@ -427,4 +470,5 @@ LOOP
 
     
 GOTO LOOP
+	
 END
