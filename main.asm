@@ -30,6 +30,10 @@ CONFIG  WDT=OFF
 	counter_alive ;contador que me mira si cambia de color por alimentación
 	which_table
 	rows_printed
+	alimentado ;flag que comprueba si se ha alimentado 
+	sano ;para pintarlo verde
+	advertencia ;para pintarlo amarillo
+	critico ;para pintarlo rojo
     ENDC
 
 Posicio_RAM EQU 0x81
@@ -91,6 +95,7 @@ INIT_PORTS
     MOVLW B'00000000'
     MOVWF TRISA, ACCESS
     BCF LATA,1,ACCESS
+    BCF LATA,0,ACCESS
 
     ;PORTB Input
     MOVLW B'11111111'
@@ -99,7 +104,7 @@ INIT_PORTS
     ;PORTC Output
     MOVLW B'00000000'
     MOVWF TRISC, ACCESS
-    BCF LATC,4,ACCESS
+    
 
     ;PORTD Output
     MOVLW B'00000000'
@@ -248,65 +253,41 @@ PMW
 ;----------------------------------------------
 
 CODE_ONE
-    BSF LATC,4,ACCESS
+    BSF LATA, 0, ACCESS
     NOP
     NOP
     NOP
     NOP
     NOP
     NOP
-    NOP
-    NOP
-    NOP
-    NOP
-    NOP
-    NOP
-    NOP
-    NOP
-    NOP
-    BCF LATC, 4, ACCESS
-    NOP
-    NOP
-    NOP
-    NOP
-    NOP
-    RETURN
+    NOP            
+    BCF LATA, 0, ACCESS
+    NOP             
+    RETURN          
     
 CODE_ZERO
-    BSF LATC,4,ACCESS
+    BSF LATA, 0, ACCESS
+    NOP
+    NOP
+    NOP            
+    BCF LATA, 0, ACCESS
     NOP
     NOP
     NOP
     NOP
-    NOP
-    BCF LATC, 4, ACCESS
-    NOP
-    NOP
-    NOP
-    NOP
-    NOP
-    NOP
-    NOP
-    NOP
-    NOP
-    NOP
-    NOP
-    NOP
-    NOP
-    NOP
-    NOP
+    NOP           
     RETURN
     
     
 COLOR_ON
-    CALL CODE_ONE
-    CALL CODE_ONE
-    CALL CODE_ONE
-    CALL CODE_ONE
-    CALL CODE_ONE
-    CALL CODE_ONE
-    CALL CODE_ONE
-    CALL CODE_ONE
+    CALL CODE_ZERO  
+    CALL CODE_ONE   
+    CALL CODE_ONE   
+    CALL CODE_ONE   
+    CALL CODE_ONE   
+    CALL CODE_ONE   
+    CALL CODE_ONE   
+    CALL CODE_ONE   
     RETURN
 
 COLOR_OFF
@@ -428,8 +409,22 @@ START_MATRIX
     
     
     
-;----------------------------------   
-;----------------------------------
+;------------------------------------------
+; SEND COLOUR ACCORDING TO HEALTH STATUS
+;------------------------------------------
+CHECK_HEALTH
+    ;miro
+    ;primero miro si me han alimentado 
+    ;si NO me han alimentado, mirar cuanto tiempo ha pasado desde la última comida
+    ;si han pasado 0-89 seg, sigo verde
+    ;si han pasado 90 seg, cambio a amarillo
+    ;si estoy en amarillo y me alimentan vuelvo a verde
+    ;si no me alimentan, reseteo la cuenta de 90 seg o bien sigo contando hasta 180 seg
+    ;si llego a 180 seg cambio a rojo y muero
+    RETURN
+    
+    
+    
 FIRE ; FUNCION DEBUG
     MOVLW   b'00000000'
     MOVWF   TRISD
