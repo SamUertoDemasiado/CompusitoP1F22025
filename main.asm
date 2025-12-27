@@ -27,13 +27,14 @@ CONFIG  WDT=OFF
 	bucle_yellow
 	bucle_red
 	current_colour
-	counter_alive ;contador que me mira si cambia de color por alimentación
+	counter_alive ;contador que me mira si cambia de color por alimentaciÃ³n
 	which_table
 	rows_printed
-	alimentado ;flag que comprueba si se ha alimentado 
 	sano ;para pintarlo verde
 	advertencia ;para pintarlo amarillo
 	critico ;para pintarlo rojo
+    contador_90s
+    comida
     ENDC
 
 Posicio_RAM EQU 0x81
@@ -69,16 +70,16 @@ ORG     0x0018
     DB b'00001000', b'00001000'    
 
     ORG teen_table
-    DB b'10000001', b'10000001'
-    DB b'10000001', b'10000001'
-    DB b'10000001', b'10000001'
-    DB b'10000001', b'10000001'
+    DB b'00000000', b'00111100'
+    DB b'01000010', b'01000010'
+    DB b'01011010', b'01000010'
+    DB b'00111100', b'00000000'
 
     ORG adult_table
-    DB b'10000001', b'10000001'
-    DB b'10000001', b'10000001'
-    DB b'10000001', b'10000001'
-    DB b'10000001', b'10000001'
+    DB b'01111110', b'10000001'
+    DB b'10111101', b'10000001'
+    DB b'10100101', b'10100101'
+    DB b'10000001', b'01111110' 
 
 ;--------------------------------
 ; CODE
@@ -110,6 +111,7 @@ INIT_PORTS
     CLRF contador_10ms,ACCESS
     CLRF contador_1s,ACCESS
     CLRF contador_1m,ACCESS
+    CLRF contador_90s,ACCESS
     CLRF t0,ACCESS
     CLRF t1,ACCESS
     CLRF tact,ACCESS
@@ -173,13 +175,6 @@ BUCLE_10MS           ; cuenta 10ms
 
 BUCLE_SEG            ; cuenta segundos
 
-    ;Rutina para incrementar el contador de hambre
-    ;--------------------------------
-    MOVLW .255
-    CPFSGT counter_alive,ACCESS
-    INCF counter_alive, F
-    ;--------------------------------
-
     INCF    contador_1s, F
     MOVLW   .99
     CPFSEQ  contador_1s
@@ -187,6 +182,7 @@ BUCLE_SEG            ; cuenta segundos
     ; Si llegamos aqui, contador_seg == 100
     CLRF    contador_1s
     CALL    BUCLE_MIN
+    CALL    BUCLE_90s
     RETURN
 
 BUCLE_MIN            ; cuenta minutos
@@ -196,6 +192,17 @@ BUCLE_MIN            ; cuenta minutos
     RETURN
     CALL    RESET_BUCLES
     RETURN
+
+BUCLE_90s
+    INCF    contador_90s, F
+    MOVLW   .89
+    CPFSEQ  contador_90s
+    RETURN
+    BTFSS advertencia,ACCESS
+    GOTO    WARNING_STATE 
+    BTFSC advertencia,ACCESS
+    GOTO    CRITICAL_STATE
+
 
 RESET_BUCLES
     INCF decadas,F
@@ -222,6 +229,19 @@ ENVEJECER
     CPFSLT decadas,ACCESS
     BSF dead,ACCESS
     CPFSLT decadas,ACCESS
+    CALL IS_DEAD
+    RETURN
+
+WARNING_STATE
+    BCF sano,ACCESS
+    BSF advertencia,ACCESS
+    BCF critico,ACCESS
+    RETURN
+
+CRITICAL_STATE
+    BCF sano,ACCESS
+    BCF advertencia,ACCESS
+    BSF critico,ACCESS
     CALL IS_DEAD
     RETURN
 
@@ -285,16 +305,27 @@ CODE_ZERO
     
     
 COLOR_ON
+    CALL CODE_ZERO   ;intensidad maxima
+    CALL CODE_ZERO  
+    CALL CODE_ONE  
     CALL CODE_ZERO  
     CALL CODE_ZERO  
-    CALL CODE_ONE   
-    CALL CODE_ONE   
     CALL CODE_ZERO  
     CALL CODE_ZERO  
-    CALL CODE_ONE   
-    CALL CODE_ZERO  
+    CALL CODE_ZERO   ;intensidad minima
     RETURN
 
+    COLOR_ON_1
+    CALL CODE_ZERO   ;intensidad maxima
+    CALL CODE_ZERO  
+    CALL CODE_ZERO  
+    CALL CODE_ZERO  
+    CALL CODE_ZERO  
+    CALL CODE_ZERO  
+    CALL CODE_ONE  
+    CALL CODE_ZERO   ;intensidad minima
+    RETURN
+    
 COLOR_OFF
     CALL CODE_ZERO
     CALL CODE_ZERO
@@ -328,6 +359,13 @@ PAINT_YELLOW
     CALL COLOR_ON
     CALL COLOR_OFF
     RETURN
+    
+PAINT_WHITE
+    CALL COLOR_ON_1
+    CALL COLOR_ON_1
+    CALL COLOR_ON_1
+    RETURN
+
 ;------------------------------
 ; ACTUALIZAR COLOR
 ;------------------------------
@@ -341,60 +379,155 @@ SELECT_COLOR
     CALL PAINT_RED
     RETURN
 
-PRINT_SHAPE
+PRINT_HEALTHY
     TBLRD*+
     BTFSC TABLAT, 0
     CALL PAINT_GREEN
     BTFSS TABLAT, 0
-    CALL PIXEL_OFF
+    CALL PAINT_WHITE
 
     BTFSC TABLAT, 1
     CALL PAINT_GREEN
     BTFSS TABLAT, 1
-    CALL PIXEL_OFF
+    CALL PAINT_WHITE
 
     BTFSC TABLAT, 2
     CALL PAINT_GREEN
     BTFSS TABLAT, 2
-    CALL PIXEL_OFF
+    CALL PAINT_WHITE
 
     BTFSC TABLAT, 3
     CALL PAINT_GREEN
     BTFSS TABLAT, 3
-    CALL PIXEL_OFF
+    CALL PAINT_WHITE
 
     BTFSC TABLAT, 4
     CALL PAINT_GREEN
     BTFSS TABLAT, 4
-    CALL PIXEL_OFF
+    CALL PAINT_WHITE
 
     BTFSC TABLAT, 5
     CALL PAINT_GREEN
     BTFSS TABLAT, 5
-    CALL PIXEL_OFF
+    CALL PAINT_WHITE
 
     BTFSC TABLAT, 6
     CALL PAINT_GREEN
     BTFSS TABLAT, 6
-    CALL PIXEL_OFF
+    CALL PAINT_WHITE
 
     BTFSC TABLAT, 7
     CALL PAINT_GREEN
     BTFSS TABLAT, 7
-    CALL PIXEL_OFF
+    CALL PAINT_WHITE
 
     ;TBLRD*+
     DECFSZ rows_printed, ACCESS
-    CALL PRINT_SHAPE
+    CALL PRINT_HEALTHY
     RETURN
 
+PRINT_WARNING
+    TBLRD*+
+    BTFSC TABLAT, 0
+    CALL PAINT_YELLOW
+    BTFSS TABLAT, 0
+    CALL PAINT_WHITE
+
+    BTFSC TABLAT, 1
+    CALL PAINT_YELLOW       
+    BTFSS TABLAT, 1
+    CALL PAINT_WHITE
+
+    BTFSC TABLAT, 2
+    CALL PAINT_YELLOW
+    BTFSS TABLAT, 2
+    CALL PAINT_WHITE
+
+    BTFSC TABLAT, 3
+    CALL PAINT_YELLOW
+    BTFSS TABLAT, 3
+    CALL PAINT_WHITE
+
+    BTFSC TABLAT, 4
+    CALL PAINT_YELLOW
+    BTFSS TABLAT, 4
+    CALL PAINT_WHITE
+
+    BTFSC TABLAT, 5
+    CALL PAINT_YELLOW
+    BTFSS TABLAT, 5
+    CALL PAINT_WHITE
+
+    BTFSC TABLAT, 6
+    CALL PAINT_YELLOW
+    BTFSS TABLAT, 6
+    CALL PAINT_WHITE
+
+    BTFSC TABLAT, 7
+    CALL PAINT_YELLOW
+    BTFSS TABLAT, 7
+    CALL PAINT_WHITE
+
+    ;TBLRD*+
+    DECFSZ rows_printed, ACCESS
+    CALL PRINT_WARNING
+    RETURN
+
+PRINT_CRITICAL
+    TBLRD*+
+    BTFSC TABLAT, 0
+    CALL PAINT_RED
+    BTFSS TABLAT, 0
+    CALL PAINT_WHITE
+
+    BTFSC TABLAT, 1
+    CALL PAINT_RED
+    BTFSS TABLAT, 1
+    CALL PAINT_WHITE
+
+    BTFSC TABLAT, 2
+    CALL PAINT_RED
+    BTFSS TABLAT, 2
+    CALL PAINT_WHITE
+
+    BTFSC TABLAT, 3
+    CALL PAINT_RED
+    BTFSS TABLAT, 3
+    CALL PAINT_WHITE
+
+    BTFSC TABLAT, 4
+    CALL PAINT_RED
+    BTFSS TABLAT, 4
+    CALL PAINT_WHITE
+
+    BTFSC TABLAT, 5
+    CALL PAINT_RED
+    BTFSS TABLAT, 5
+    CALL PAINT_WHITE
+
+    BTFSC TABLAT, 6
+    CALL PAINT_RED
+    BTFSS TABLAT, 6
+    CALL PAINT_WHITE
+
+    BTFSC TABLAT, 7
+    CALL PAINT_RED
+    BTFSS TABLAT, 7
+    CALL PAINT_WHITE
+
+    ;TBLRD*+
+    DECFSZ rows_printed, ACCESS
+    CALL PRINT_CRITICAL
+    RETURN
+
+
+
 INIT_TABLE
-    MOVLW .0
-    MOVWF TBLPTRU
-    MOVLW .1
+    MOVWF TBLPTRL      ; Move value from W (0, 16, or 32) into Table Pointer Low
+    MOVLW .1           ; Set High Byte to 01 (Base address 0x0100)
     MOVWF TBLPTRH
-    MOVLW which_table
-    MOVWF TBLPTRL 
+    MOVLW .0           ; Set Upper Byte to 00
+    MOVWF TBLPTRU
     RETURN
 
 GROW
@@ -418,13 +551,17 @@ START_MATRIX
     BTFSC adult,ACCESS
     CALL GROW2    
     
-    ;MOVWF which_table,ACCESS
-    
+    MOVF which_table,W,ACCESS
     CALL INIT_TABLE
     
     MOVLW .8
     MOVWF rows_printed,ACCESS
-    CALL PRINT_SHAPE
+    BTFSC sano,ACCESS
+    CALL PRINT_HEALTHY
+    BTFSC advertencia,ACCESS
+    CALL PRINT_WARNING
+    BTFSC critico,ACCESS 
+    CALL PRINT_CRITICAL
     BSF INTCON, 5
     RETURN
 
@@ -432,47 +569,24 @@ START_MATRIX
     
     
 ;------------------------------------------
-; SEND COLOUR ACCORDING TO HEALTH STATUS
+; ALIMENTAR TAMAGOTCHI
 ;------------------------------------------
-CHECK_HEALTH
-    ;primero miro si me han alimentado 
-    ;si NO me han alimentado, mirar cuanto tiempo ha pasado desde la última comida
-    ;si han pasado 0-89 seg, sigo verde
-    ;si han pasado 90 seg, cambio a amarillo
-    ;si estoy en amarillo y me alimentan vuelvo a verde
-    ;si no me alimentan, reseteo la cuenta de 90 seg o bien sigo contando hasta 180 seg
-    ;si llego a 180 seg cambio a rojo y muero
-    ;--------------------------------------------------
-    ;comprobar si me han alimentado
-    BTFSC alimentado,ACCESS
-    ;si me han alimentado, vuelvo a verde
-    BSF sano,ACCESS
-    BCF advertencia,ACCESS
-    BCF critico,ACCESS
-    ;cuento 90 seg para volver a amarillo
-    MOVLW .90
-    MOVWF counter_alive,ACCESS
-    BCF alimentado,ACCESS
+FEED_TAMAGOTCHI ;función ALIMENTAR del menu
+    ;comprobar si tengo tokens disponibles para alimentar
+    ;si tengo, alimentar y resto un token
+    ;si no tengo tokens, hago la rutina de no alimentar
+    MOVLW   .0
+    CPFSEQ comida,ACCESS
+    CALL HEALTHY_STATE
+    RETURN
+
+
+HEALTHY_STATE
+    DECF comida,ACCESS
     BCF sano,ACCESS
     BSF advertencia,ACCESS
     BCF critico,ACCESS
-    CALL PAINT_YELLOW
-    ;ahora estoy en amarillo, si me alimentan vuelvo a verde
-    BTFSC alimentado,ACCESS
-    BSF sano,ACCESS
-    BCF advertencia,ACCESS
-    BCF critico,ACCESS
-    ;si no me alimentan, cuento 90 seg más para llegar a rojo
-    MOVLW .90
-    MOVWF counter_alive,ACCESS
-    BCF alimentado,ACCESS
-    BCF sano,ACCESS
-    BCF advertencia,ACCESS
-    BSF critico,ACCESS
-    CALL PAINT_RED
-    CALL IS_DEAD
     RETURN
-    
     
     
 FIRE ; FUNCION DEBUG
