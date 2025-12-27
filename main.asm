@@ -175,6 +175,14 @@ BUCLE_10MS           ; cuenta 10ms
     RETURN
 
 BUCLE_SEG            ; cuenta segundos
+
+    ;Rutina para incrementar el contador de hambre
+    ;--------------------------------
+    MOVLW .255
+    CPFSGT counter_alive,ACCESS
+    INCF counter_alive, F
+    ;--------------------------------
+
     INCF    contador_1s, F
     MOVLW   .99
     CPFSEQ  contador_1s
@@ -281,13 +289,13 @@ CODE_ZERO
     
 COLOR_ON
     CALL CODE_ZERO  
+    CALL CODE_ZERO  
     CALL CODE_ONE   
     CALL CODE_ONE   
+    CALL CODE_ZERO  
+    CALL CODE_ZERO  
     CALL CODE_ONE   
-    CALL CODE_ONE   
-    CALL CODE_ONE   
-    CALL CODE_ONE   
-    CALL CODE_ONE   
+    CALL CODE_ZERO  
     RETURN
 
 COLOR_OFF
@@ -300,11 +308,13 @@ COLOR_OFF
     CALL CODE_ZERO
     CALL CODE_ZERO
     RETURN    
+PIXEL_OFF
+    CALL COLOR_OFF 
+    CALL COLOR_OFF 
+    CALL COLOR_OFF 
+    RETURN
 
 PAINT_GREEN
-    ;CALL BIT_COLOUR_ON
-    ;CALL BIT_COLOUR_OFF
-    ;CALL BIT_COLOUR_OFF
     CALL COLOR_ON
     CALL COLOR_OFF
     CALL COLOR_OFF
@@ -325,49 +335,64 @@ PAINT_YELLOW
 ; ACTUALIZAR COLOR
 ;------------------------------
 
+SELECT_COLOR
+    BTFSC sano,ACCESS
+    CALL PAINT_GREEN
+    BTFSC advertencia,ACCESS
+    CALL PAINT_YELLOW
+    BTFSC critico,ACCESS
+    CALL PAINT_RED
+    RETURN
 
 PRINT_SHAPE
     BTFSC TABLAT, 0
     CALL PAINT_GREEN
     BTFSS TABLAT, 0
-    CALL PAINT_RED
+    CALL PIXEL_OFF
+
     BTFSC TABLAT, 1
     CALL PAINT_GREEN
     BTFSS TABLAT, 1
-    CALL PAINT_RED
+    CALL PIXEL_OFF
+
     BTFSC TABLAT, 2
     CALL PAINT_GREEN
     BTFSS TABLAT, 2
-    CALL PAINT_RED
+    CALL PIXEL_OFF
+
     BTFSC TABLAT, 3
     CALL PAINT_GREEN
     BTFSS TABLAT, 3
-    CALL PAINT_RED
+    CALL PIXEL_OFF
+
     BTFSC TABLAT, 4
     CALL PAINT_GREEN
     BTFSS TABLAT, 4
-    CALL PAINT_RED
+    CALL PIXEL_OFF
+
     BTFSC TABLAT, 5
     CALL PAINT_GREEN
     BTFSS TABLAT, 5
-    CALL PAINT_RED
+    CALL PIXEL_OFF
+
     BTFSC TABLAT, 6
     CALL PAINT_GREEN
     BTFSS TABLAT, 6
-    CALL PAINT_RED
+    CALL PIXEL_OFF
+
     BTFSC TABLAT, 7
     CALL PAINT_GREEN
     BTFSS TABLAT, 7
-    CALL PAINT_RED
+    CALL PIXEL_OFF
+
     TBLRD*+
     DECFSZ rows_printed, ACCESS
     CALL PRINT_SHAPE
     RETURN
 
-      
 INIT_TABLE
-    MOVLW .0; Load TBLPTR with the base
-    MOVWF TBLPTRU ; address of the word
+    MOVLW .0
+    MOVWF TBLPTRU
     MOVLW .1
     MOVWF TBLPTRH
     MOVLW which_table
@@ -404,7 +429,6 @@ START_MATRIX
     CALL PRINT_SHAPE
     BSF INTCON, 5
     RETURN
-  
 
     
     
@@ -413,7 +437,6 @@ START_MATRIX
 ; SEND COLOUR ACCORDING TO HEALTH STATUS
 ;------------------------------------------
 CHECK_HEALTH
-    ;miro
     ;primero miro si me han alimentado 
     ;si NO me han alimentado, mirar cuanto tiempo ha pasado desde la última comida
     ;si han pasado 0-89 seg, sigo verde
@@ -421,6 +444,35 @@ CHECK_HEALTH
     ;si estoy en amarillo y me alimentan vuelvo a verde
     ;si no me alimentan, reseteo la cuenta de 90 seg o bien sigo contando hasta 180 seg
     ;si llego a 180 seg cambio a rojo y muero
+    ;--------------------------------------------------
+    ;comprobar si me han alimentado
+    BTFSC alimentado,ACCESS
+    ;si me han alimentado, vuelvo a verde
+    BSF sano,ACCESS
+    BCF advertencia,ACCESS
+    BCF critico,ACCESS
+    ;cuento 90 seg para volver a amarillo
+    MOVLW .90
+    MOVWF counter_alive,ACCESS
+    BCF alimentado,ACCESS
+    BCF sano,ACCESS
+    BSF advertencia,ACCESS
+    BCF critico,ACCESS
+    CALL PAINT_YELLOW
+    ;ahora estoy en amarillo, si me alimentan vuelvo a verde
+    BTFSC alimentado,ACCESS
+    BSF sano,ACCESS
+    BCF advertencia,ACCESS
+    BCF critico,ACCESS
+    ;si no me alimentan, cuento 90 seg más para llegar a rojo
+    MOVLW .90
+    MOVWF counter_alive,ACCESS
+    BCF alimentado,ACCESS
+    BCF sano,ACCESS
+    BCF advertencia,ACCESS
+    BSF critico,ACCESS
+    CALL PAINT_RED
+    CALL IS_DEAD
     RETURN
     
     
