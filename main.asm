@@ -342,6 +342,7 @@ SELECT_COLOR
     RETURN
 
 PRINT_SHAPE
+    TBLRD*+
     BTFSC TABLAT, 0
     CALL PAINT_GREEN
     BTFSS TABLAT, 0
@@ -382,7 +383,7 @@ PRINT_SHAPE
     BTFSS TABLAT, 7
     CALL PIXEL_OFF
 
-    TBLRD*+
+    ;TBLRD*+
     DECFSZ rows_printed, ACCESS
     CALL PRINT_SHAPE
     RETURN
@@ -417,7 +418,7 @@ START_MATRIX
     BTFSC adult,ACCESS
     CALL GROW2    
     
-    MOVWF which_table,ACCESS
+    ;MOVWF which_table,ACCESS
     
     CALL INIT_TABLE
     
