@@ -551,7 +551,6 @@ START_MATRIX
     BTFSC adult,ACCESS
     CALL GROW2    
     
-    MOVF which_table,W,ACCESS
     CALL INIT_TABLE
     
     MOVLW .8
