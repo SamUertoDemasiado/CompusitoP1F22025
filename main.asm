@@ -23,16 +23,16 @@ CONFIG  WDT=OFF
         t0
         t1
         tact
-	bucle_green
-	bucle_yellow
-	bucle_red
-	current_colour
-	counter_alive ;contador que me mira si cambia de color por alimentaciÃ³n
-	which_table
-	rows_printed
-	sano ;para pintarlo verde
-	advertencia ;para pintarlo amarillo
-	critico ;para pintarlo rojo
+    bucle_green
+    bucle_yellow
+    bucle_red
+    current_colour
+    counter_alive ;contador que me mira si cambia de color por alimentaciÃ³n
+    which_table
+    rows_printed
+    sano ;para pintarlo verde
+    advertencia ;para pintarlo amarillo
+    critico ;para pintarlo rojo
     contador_90s
     comida
     ENDC
@@ -63,11 +63,11 @@ ORG     0x0018
 ;--------------------------------
 ; DATA TABLES (FLASH MEMORY)
 ;--------------------------------
-    ORG baby_table
-    DB b'00001000', b'00001000'
-    DB b'00001000', b'00001000'
-    DB b'00001000', b'00001000'
-    DB b'00001000', b'00001000'    
+    ORG baby_table 
+    DB b'00000000', b'00000000'
+    DB b'00011000', b'00100100'
+    DB b'00100100', b'00011000'
+    DB b'00000000', b'00000000'
 
     ORG teen_table
     DB b'00000000', b'00111100'
@@ -116,6 +116,9 @@ INIT_PORTS
     CLRF t1,ACCESS
     CLRF tact,ACCESS
     BSF baby,ACCESS
+     BCF adult,ACCESS
+      BCF teenager,ACCESS
+      BCF,dead,ACCESS
     CLRF decadas,ACCESS
     CLRF current_colour,ACCESS
     BSF LATA,0,ACCESS
@@ -125,7 +128,9 @@ INIT_PORTS
     CLRF which_table, ACCESS
     MOVLW .8
     MOVWF rows_printed,ACCESS
-
+    BSF sano,ACCESS
+    BCF advertencia,ACCESS
+    BCF critico,ACCESS
     
     RETURN
 
@@ -232,18 +237,7 @@ ENVEJECER
     CALL IS_DEAD
     RETURN
 
-WARNING_STATE
-    BCF sano,ACCESS
-    BSF advertencia,ACCESS
-    BCF critico,ACCESS
-    RETURN
 
-CRITICAL_STATE
-    BCF sano,ACCESS
-    BCF advertencia,ACCESS
-    BSF critico,ACCESS
-    CALL IS_DEAD
-    RETURN
 
 IS_DEAD
     GOTO IS_DEAD
@@ -307,9 +301,9 @@ CODE_ZERO
 COLOR_ON
     CALL CODE_ZERO   ;intensidad maxima
     CALL CODE_ZERO  
+    CALL CODE_ZERO  
+    CALL CODE_ZERO  
     CALL CODE_ONE  
-    CALL CODE_ZERO  
-    CALL CODE_ZERO  
     CALL CODE_ZERO  
     CALL CODE_ZERO  
     CALL CODE_ZERO   ;intensidad minima
@@ -551,6 +545,7 @@ START_MATRIX
     BTFSC adult,ACCESS
     CALL GROW2    
     
+    MOVF which_table, W, ACCESS
     CALL INIT_TABLE
     
     MOVLW .8
@@ -582,11 +577,23 @@ FEED_TAMAGOTCHI ;función ALIMENTAR del menu
 
 HEALTHY_STATE
     DECF comida,ACCESS
+    BSF sano,ACCESS
+    BCF advertencia,ACCESS
+    BCF critico,ACCESS
+    RETURN
+    
+    WARNING_STATE
     BCF sano,ACCESS
     BSF advertencia,ACCESS
     BCF critico,ACCESS
     RETURN
-    
+
+CRITICAL_STATE
+    BCF sano,ACCESS
+    BCF advertencia,ACCESS
+    BSF critico,ACCESS
+    CALL IS_DEAD
+    RETURN
     
 FIRE ; FUNCION DEBUG
     MOVLW   b'00000000'
@@ -596,14 +603,15 @@ FIRE ; FUNCION DEBUG
     GOTO    FIRE
 
 MAIN
+    
     ;CALL FIRE
     CALL INIT_PORTS
     CALL INIT_CONFIG
     CALL RESET_INTERRUPTS
-    
+     CALL START_MATRIX
+    BCF LATA,0,ACCESS      ; datos a 0
 LOOP
     BSF LATA,2,0
-    CALL START_MATRIX
     GOTO LOOP
 
     END
