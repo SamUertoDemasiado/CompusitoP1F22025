@@ -6,7 +6,49 @@ CONFIG  WDT=OFF    ; Desactivem el WatchDog Timer.
 CONFIG LVP=OFF
 
 
-TAULA7S		EQU 0x03A; del 0x3A a 0x41
+    CBLOCK 0x22         ; Start variables at 0x22
+        contador_10ms
+        contador_1s
+        decadas
+        baby            ; Flag
+        teenager        ; Flag
+        adult           ; Flag
+        dead            ; Flag
+        contador_1m
+        t0
+        t1
+        tact
+    bucle_green
+    bucle_yellow
+    bucle_red
+    current_colour
+    counter_alive ;contador que me mira si cambia de color por alimentaciÃ³n
+    which_table
+    rows_printed
+    sano ;para pintarlo verde
+    advertencia ;para pintarlo amarillo
+    critico ;para pintarlo rojo
+    contador_90s
+    comida
+    flag_16ms
+    contador_16ms
+    mode
+    random_number         
+    flag_game		
+    contador_game	
+    flag_rpulse		
+    contador_rpulse	
+    random_seed	
+    espera_random	
+    espera_random_counter 
+     espera_random_base
+    ENDC   
+    Posicio_RAM EQU 0x81
+    baby_table EQU 0x0110
+    teen_table EQU 0x0120
+    adult_table EQU 0x0130
+    dead_table EQU 0x0140
+    TAULA7S EQU 0x0150
 
 ORG	    0x0000
 GOTO	    MAIN
@@ -14,48 +56,96 @@ ORG	    0x0008  ;Interrupts de alta prioridad
 GOTO	    HIGH_IRS ;Zona de interrupciones
 ORG	    0x0018
 RETFIE FAST
+     ;--------------------------------
+; DATA TABLES (FLASH MEMORY)
 ;--------------------------------
-;   AsignaciÃ³n de variables
-;--------------------------------
-ORG TAULA7S
-   ;Segments del 0, segments del 1
-DB 0x7D, 0x30
-;Segments del 2, segments del 3
-DB 0x6E, 0x7A
-;Segments del 4, segments del 5
-DB 0X33, 0x5B
-;Segments del 6, segments del 7
-DB 0x5F, 0x70
-;Segments del 8, segments del 9
-DB 0x7F, 0x73   
-    
-contador_10ms	EQU 0x022  ; contador de 99 vueltas
-contador_1s    EQU 0x023  ; contador de 99 vueltas
-decadas		EQU 0x024  ; almacena las decadas 
-baby		EQU 0x025  ; Flag que indica estado baby
-teenager	EQU 0x026  ; Flag que indica estado teenager
-adult		EQU 0x027  ; Flag que indica estado adult
-dead		EQU 0x028  ; Flag que indica la muerte del tamagotchi
-contador_1m	EQU 0x029  ; contador de 59 vueltas
-flag_16ms		EQU 0X02A ; flag contar 16ms
-contador_16ms	EQU 0X02B ; counter 16ms
-mode		EQU 0x02C ; menu del juego
-random_number         EQU 0x02D ; numero aleatorio 
-flag_game		EQU 0x02E 
-contador_game	EQU 0x02F
-t0		EQU 0X030 ; tiempo que el pmw ha de estar a 0
-t1		EQU 0X031 ; Tiempo que ha de estar a 1
-tact		EQU 0x032; tiempo actual del estado actual del pmw
-comida		EQU 0x033 ;contador de comida
-flag_rpulse		EQU 0x034
-contador_rpulse	EQU 0x035
-random_seed	EQU 0x036
-espera_random	EQU 0x037
-espera_random_counter EQU 0x038
- espera_random_base EQU 0x039
+    ORG baby_table 
+    DB b'00000000', b'00000000'
+    DB b'00011000', b'00100100'
+    DB b'00100100', b'00011000'
+    DB b'00000000', b'00000000'
 
-Posicio_RAM EQU 0x081 ;en la posicion 0x81 de memoria 
- 
+    ORG teen_table
+    DB b'00000000', b'00111100'
+    DB b'01000010', b'01000010'
+    DB b'01011010', b'01000010'
+    DB b'00111100', b'00000000'
+
+    ORG adult_table
+    DB b'01111110', b'10000001'
+    DB b'10111101', b'10000001'
+    DB b'10100101', b'10100101'
+    DB b'10000001', b'01111110' 
+    
+     ORG dead_table
+    DB b'00011000', b'00011000'
+    DB b'00011000', b'00011000'
+    DB b'01111110', b'01111110'
+    DB b'00011000', b'00011000'    
+    
+    ORG TAULA7S
+   ;Segments del 0, segments del 1
+    DB 0x7D, 0x30
+    ;Segments del 2, segments del 3
+    DB 0x6E, 0x7A
+    ;Segments del 4, segments del 5
+    DB 0X33, 0x5B
+    ;Segments del 6, segments del 7
+    DB 0x5F, 0x70
+    ;Segments del 8, segments del 9
+    DB 0x7F, 0x73   
+    
+INIT_PORTS
+    ;PORTA Todo de salida; grid, servo, RandomGenerated, Menu[2..0]
+    MOVLW B'00000000' ;A7 nada, A6 nada, A5 menu 2, A4 menu 1, A3 menu 0, A2 RandomGenerated, A1 servo, A0 grid 
+    MOVWF TRISA, ACCESS
+    BCF LATA,1,ACCESS
+    BCF LATA,0,ACCESS
+    ;PORTB Todo de entrada; botones Left option, Right option, Select, PCI, ResultPulse, NewNumber
+    MOVLW B'11111111' ;B7 nada, B6 nada, B5 NewNumber, B4 ResultPulse, B3 PCI, B2 BtnSelect, B1 BtnLeftOption, B0 BtnRightOption
+    MOVWF TRISB, ACCESS
+    ;PORTC Todo de salida; C7 nada, C6 nada, C5 nada, C4 nada, C3 RandomNumber0, C2 RandomNumber1, C1 RandomNumber2, C0 RandomNumber3
+    MOVLW B'00000000'
+    MOVWF TRISC, ACCESS
+    ;PORTD Todo de salida; 7Seg
+    MOVLW B'00000000' ;D7 nada, D6 7Seg6, D5 7Seg5, D4 7Seg4, D3 7Seg3, D2 7Seg2, D1 7Seg1, D0 7Seg0
+    MOVWF TRISD, ACCESS
+    CLRF espera_random_base
+    CLRF contador_game
+    CLRF flag_game
+    CLRF espera_random_counter
+    CLRF contador_10ms,ACCESS
+    CLRF contador_1s,ACCESS
+        CLRF contador_90s,ACCESS
+    CLRF contador_1m,ACCESS
+    CLRF t0,ACCESS
+    CLRF t1,ACCESS
+    CLRF tact,ACCESS
+    BSF baby,ACCESS
+    CLRF decadas,ACCESS
+    BCF flag_16ms,0
+    MOVLW .1
+    MOVWF mode,ACCESS
+    CALL UPDATE_LEDS
+    CLRF LATD
+    BSF   LATA,2,0
+    BCF adult,ACCESS
+    BCF teenager,ACCESS
+    BCF dead,ACCESS
+    CLRF current_colour,ACCESS
+    BSF LATA,0,ACCESS
+        MOVLW .90
+    MOVWF counter_alive,ACCESS
+    CLRF which_table, ACCESS
+        MOVLW .8
+    MOVLW .1
+    MOVWF rows_printed,ACCESS
+    BSF sano,ACCESS
+    BCF advertencia,ACCESS
+    BCF critico,ACCESS
+    
+    RETURN
+    
 INIT_CONFIG
     CLRF TRISC
     MOVLW B'11100000'
@@ -63,7 +153,7 @@ INIT_CONFIG
     MOVLW B'10001000'
     MOVWF T0CON, ACCESS
     BSF RCON,IPEN ;Se activan las high-priority
-    MOVLW B'11000000'
+    MOVLW B'11010000'
     MOVWF INTCON3
     BCF INTCON2,RBPU
     RETURN
@@ -80,45 +170,8 @@ RESET_INTERRUPTS
     MOVWF TMR0H,ACCESS
     
     RETURN 
-INIT_PORTS
-    ;PORTA Todo de salida; grid, servo, RandomGenerated, Menu[2..0]
-    MOVLW B'00000000' ;A7 nada, A6 nada, A5 menu 2, A4 menu 1, A3 menu 0, A2 RandomGenerated, A1 servo, A0 grid 
-    MOVWF TRISA, ACCESS
-    BCF LATA,1,ACCESS
 
-    ;PORTB Todo de entrada; botones Left option, Right option, Select, PCI, ResultPulse, NewNumber
-    MOVLW B'11111111' ;B7 nada, B6 nada, B5 NewNumber, B4 ResultPulse, B3 PCI, B2 BtnSelect, B1 BtnLeftOption, B0 BtnRightOption
-    MOVWF TRISB, ACCESS
-    
-    ;PORTC Todo de salida; C7 nada, C6 nada, C5 nada, C4 nada, C3 RandomNumber0, C2 RandomNumber1, C1 RandomNumber2, C0 RandomNumber3
-    MOVLW B'00000000'
-    MOVWF TRISC, ACCESS
-    ;PORTD Todo de salida; 7Seg
-    MOVLW B'00000000' ;D7 nada, D6 7Seg6, D5 7Seg5, D4 7Seg4, D3 7Seg3, D2 7Seg2, D1 7Seg1, D0 7Seg0
-    MOVWF TRISD, ACCESS
-    CLRF espera_random_base
-    CLRF contador_game
-    CLRF flag_game
-    CLRF espera_random_counter
-    CLRF contador_10ms,ACCESS
-    CLRF contador_1s,ACCESS
-    CLRF contador_1m,ACCESS
-    CLRF t0,ACCESS
-    CLRF t1,ACCESS
-    CLRF tact,ACCESS
-    BSF baby,ACCESS
-    CLRF decadas,ACCESS
-    BCF flag_16ms,0
-    MOVLW .1
-    MOVWF mode,ACCESS
-    CALL UPDATE_LEDS
-    CLRF LATD
-    BSF   LATA,2,0
-    
-    MOVLW TAULA7S
-    MOVWF TBLPTRL
-    CLRF TBLPTRH
-    RETURN
+;//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////// Funciones para controlar los botones y menus
 
 BOTON
     BSF flag_16ms,1
@@ -162,7 +215,6 @@ MS16Vuelta
     BCF flag_16ms,1
     CLRF contador_16ms       ; reseteo segundos
     RETURN
-    
 NEXT_MODE
     INCF    mode, F            ; MODE++
     MOVLW   .4                 ; si MODE == 4 -> volver a 1
@@ -189,15 +241,15 @@ SELECT_MODE
     CPFSEQ  mode, ACCESS
     GOTO SELECT_MODE_2
     GOTO GAME
-
 SELECT_MODE_2
     MOVLW   .2
     CPFSEQ  mode, ACCESS
-    ;GOTO ALIMENTAR
-    ;GOTO REINICIAR
-    RETURN; eliminar
+    GOTO FEED_TAMAGOTCHI
+    GOTO MAIN
     RETURN
 
+;fin menu
+;////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////modo de juego con la fase 1
 
 GAME ;poner el numero en latc y latd
 	;aleatoriedad
@@ -227,8 +279,6 @@ CONSEGUIDO
   MOVFF  random_seed,random_number
   MOVFF  random_number,LATC
   CLRF LATD
-  CLRF TBLPTRH
-  CLRF TBLPTRU
   MOVLW TAULA7S
   MOVWF TBLPTRL
   MOVF    random_number, W, ACCESS
@@ -268,23 +318,18 @@ GAME_WAIT_1
     CPFSEQ  contador_game,ACCESS
     GOTO GAME_WAIT_1
     GOTO GAME
-    
 FIN_GAME
     BSF	LATA,2,0
     BSF flag_rpulse,1
     BTFSC PORTB,4,0;rpulse
     GOTO FIN_GAME
-    
-    
     MOVLW   .14 ; si rpulse
     CPFSGT  contador_rpulse,ACCESS
     GOTO REINICIO_GAME ;x!>1 todo mal
-
 MAS_COMIDA
     MOVLW   .5
     CPFSEQ  comida, ACCESS   ; ¿contador == 5?
     INCF    comida, F        ; si NO es 5 ? contador++
-
 REINICIO_GAME
           BCF flag_game,1
     BCF flag_rpulse,1 
@@ -293,7 +338,10 @@ REINICIO_GAME
         CLRF espera_random_base,ACCESS
     GOTO LOOP
     
-UPDATE_LEDS
+;//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////// led RGB
+    
+    
+    UPDATE_LEDS
     ; Limpia solo RA2..RA0 (deja el resto de LATA igual)
     MOVLW   b'11000111'
     ANDWF   LATA, F, ACCESS
@@ -325,32 +373,26 @@ MODE3
     
     
     
-    
-
-
+; ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////INTERRUPCIÓN DEL TIMER
 HIGH_IRS
     ;La interrupcion saltara cada 1ms
     BTFSC INTCON, TMR0IF,ACCESS
     CALL TMR0_INTERRUPT
     RETFIE FAST
-
 TMR0_INTERRUPT
     CALL RESET_INTERRUPTS
     BCF INTCON, TMR0IF,ACCESS ;es el bit 2 del INTCON
     CALL BUCLE_10MS
     CALL PMW
     RETURN
-
 BUCLE_10MS          ; cuenta 10ms, 0,1ms
     INCF    contador_10ms, F,ACCESS      ; contador_10ms++    
-    
     INCF    espera_random_counter,F,ACCESS  ;contador numero random
-
     
     BTFSC flag_16ms,1,ACCESS	; contar 16ms
     INCF    contador_16ms,F,ACCESS         ; contador_seg++
-    
-        BTFSC flag_rpulse,1,ACCESS	; contar ms de game
+   
+    BTFSC flag_rpulse,1,ACCESS	; contar ms de game
     INCF    contador_rpulse,F,ACCESS  
     
     INCF random_seed,F,ACCESS
@@ -381,38 +423,65 @@ BUCLE_SEG           ; cuenta segundos, 10ms
     ; Si llegamos aquí, contador_seg == 100
     CLRF    contador_1s,ACCESS           ; reseteo segundos
     CALL    BUCLE_MIN             ; acumulo 1s
+    CALL    BUCLE_90s
     RETURN
 
 BUCLE_MIN           ; cuenta minutos
     INCF    contador_1m, F,ACCESS         ; contador_min++
    
-    MOVLW   .2                ; hemos llegado a 1min?
+    MOVLW   .5                ; hemos llegado a 1min?
     CPFSEQ  contador_1m,ACCESS  
     RETURN                        ; si aún no he llegado, salgo
-
     CALL    RESET_BUCLES          ;llegada a la decada
     RETURN
+
+BUCLE_90s ;llamada a cambiar estado
+    BTFSC dead,ACCESS
+    RETURN
     
+    INCF    contador_90s, F
+    MOVLW   .90
+    CPFSEQ  contador_90s
+    RETURN
+    BTFSC advertencia,ACCESS
+    GOTO    CRITICAL_STATE
+    BTFSS advertencia,ACCESS
+    GOTO    WARNING_STATE 
+
 RESET_BUCLES
     INCF decadas,F,ACCESS  
     CLRF contador_1m,ACCESS  
     CALL ENVEJECER
     RETURN
-    
+WARNING_STATE
+    CLRF contador_90s, ACCESS
+    BCF sano,ACCESS
+    BSF advertencia,ACCESS
+    BCF critico,ACCESS
+    CALL START_MATRIX
+    RETURN
+
+CRITICAL_STATE
+        CLRF contador_90s, ACCESS
+
+    BCF sano,ACCESS
+    BCF advertencia,ACCESS
+    BSF critico,ACCESS
+    CALL IS_DEAD
+    RETURN
 
 ENVEJECER    
-
     MOVLW .3
     CPFSLT decadas,ACCESS ;AquÃ­ cambio a teenager
     BCF baby,ACCESS
     CPFSLT decadas,ACCESS
-    BSF teenager,ACCESS
+    CALL TEEN
     
     MOVLW .6
     CPFSLT decadas,ACCESS ;AquÃ­ cambio a adult
     BCF teenager,ACCESS
     CPFSLT decadas,ACCESS
-    BSF adult,ACCESS
+    CALL ADULT
     
     MOVLW .10
     CPFSLT decadas,ACCESS
@@ -423,10 +492,8 @@ ENVEJECER
     CALL IS_DEAD
     RETURN
     
-IS_DEAD
-    MOVLW .10
-    MOVWF decadas, ACCESS
-    RETURN
+
+    
 PMW
 
     INCF tact, F
@@ -453,12 +520,345 @@ PMW
     CLRF tact
     RETURN
 
+    ;////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////MATRIZ Y SUS MOVIDAS
+    
+    CODE_ONE
+    BSF LATA, 0, ACCESS
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP            
+    BCF LATA, 0, ACCESS
+    NOP             
+    RETURN          
+    
+CODE_ZERO
+    BSF LATA, 0, ACCESS
+    NOP
+    NOP
+    NOP            
+    BCF LATA, 0, ACCESS
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP           
+    RETURN
+    
+    
+COLOR_ON
+    CALL CODE_ZERO   ;intensidad maxima
+    CALL CODE_ZERO  
+    CALL CODE_ZERO  
+    CALL CODE_ZERO  
+    CALL CODE_ONE  
+    CALL CODE_ZERO  
+    CALL CODE_ZERO  
+    CALL CODE_ZERO   ;intensidad minima
+    RETURN
+
+    COLOR_ON_1
+    CALL CODE_ZERO   ;intensidad maxima
+    CALL CODE_ZERO  
+    CALL CODE_ZERO  
+    CALL CODE_ZERO  
+    CALL CODE_ZERO  
+    CALL CODE_ZERO  
+    CALL CODE_ONE  
+    CALL CODE_ZERO   ;intensidad minima
+    RETURN
+    
+COLOR_OFF
+    CALL CODE_ZERO
+    CALL CODE_ZERO
+    CALL CODE_ZERO
+    CALL CODE_ZERO
+    CALL CODE_ZERO
+    CALL CODE_ZERO
+    CALL CODE_ZERO
+    CALL CODE_ZERO
+    RETURN    
+PIXEL_OFF
+    CALL COLOR_OFF 
+    CALL COLOR_OFF 
+    CALL COLOR_OFF 
+    RETURN
+
+PAINT_GREEN
+    CALL COLOR_ON
+    CALL COLOR_OFF
+    CALL COLOR_OFF
+    RETURN
+
+PAINT_RED
+    CALL COLOR_OFF
+    CALL COLOR_ON
+    CALL COLOR_OFF
+    RETURN
+
+PAINT_YELLOW
+    CALL COLOR_ON
+    CALL COLOR_ON
+    CALL COLOR_OFF
+    RETURN
+    
+PAINT_WHITE
+    CALL COLOR_ON_1
+    CALL COLOR_ON_1
+    CALL COLOR_ON_1
+    RETURN
+
+;------------------------------
+; ACTUALIZAR COLOR
+;------------------------------
+
+SELECT_COLOR
+    BTFSC sano,ACCESS
+    CALL PAINT_GREEN
+    BTFSC advertencia,ACCESS
+    CALL PAINT_YELLOW
+    BTFSC critico,ACCESS
+    CALL PAINT_RED
+    RETURN
+
+PRINT_HEALTHY
+    TBLRD*+
+    BTFSC TABLAT, 0
+    CALL PAINT_GREEN
+    BTFSS TABLAT, 0
+    CALL PAINT_WHITE
+
+    BTFSC TABLAT, 1
+    CALL PAINT_GREEN
+    BTFSS TABLAT, 1
+    CALL PAINT_WHITE
+
+    BTFSC TABLAT, 2
+    CALL PAINT_GREEN
+    BTFSS TABLAT, 2
+    CALL PAINT_WHITE
+
+    BTFSC TABLAT, 3
+    CALL PAINT_GREEN
+    BTFSS TABLAT, 3
+    CALL PAINT_WHITE
+
+    BTFSC TABLAT, 4
+    CALL PAINT_GREEN
+    BTFSS TABLAT, 4
+    CALL PAINT_WHITE
+
+    BTFSC TABLAT, 5
+    CALL PAINT_GREEN
+    BTFSS TABLAT, 5
+    CALL PAINT_WHITE
+
+    BTFSC TABLAT, 6
+    CALL PAINT_GREEN
+    BTFSS TABLAT, 6
+    CALL PAINT_WHITE
+
+    BTFSC TABLAT, 7
+    CALL PAINT_GREEN
+    BTFSS TABLAT, 7
+    CALL PAINT_WHITE
+
+    ;TBLRD*+
+    DECFSZ rows_printed, ACCESS
+    CALL PRINT_HEALTHY
+    RETURN
+
+PRINT_WARNING
+    TBLRD*+
+    BTFSC TABLAT, 0
+    CALL PAINT_YELLOW
+    BTFSS TABLAT, 0
+    CALL PAINT_WHITE
+
+    BTFSC TABLAT, 1
+    CALL PAINT_YELLOW       
+    BTFSS TABLAT, 1
+    CALL PAINT_WHITE
+
+    BTFSC TABLAT, 2
+    CALL PAINT_YELLOW
+    BTFSS TABLAT, 2
+    CALL PAINT_WHITE
+
+    BTFSC TABLAT, 3
+    CALL PAINT_YELLOW
+    BTFSS TABLAT, 3
+    CALL PAINT_WHITE
+
+    BTFSC TABLAT, 4
+    CALL PAINT_YELLOW
+    BTFSS TABLAT, 4
+    CALL PAINT_WHITE
+
+    BTFSC TABLAT, 5
+    CALL PAINT_YELLOW
+    BTFSS TABLAT, 5
+    CALL PAINT_WHITE
+
+    BTFSC TABLAT, 6
+    CALL PAINT_YELLOW
+    BTFSS TABLAT, 6
+    CALL PAINT_WHITE
+
+    BTFSC TABLAT, 7
+    CALL PAINT_YELLOW
+    BTFSS TABLAT, 7
+    CALL PAINT_WHITE
+
+    ;TBLRD*+
+    DECFSZ rows_printed, ACCESS
+    CALL PRINT_WARNING
+    RETURN
+
+PRINT_CRITICAL
+    TBLRD*+
+    BTFSC TABLAT, 0
+    CALL PAINT_RED
+    BTFSS TABLAT, 0
+    CALL PAINT_WHITE
+
+    BTFSC TABLAT, 1
+    CALL PAINT_RED
+    BTFSS TABLAT, 1
+    CALL PAINT_WHITE
+
+    BTFSC TABLAT, 2
+    CALL PAINT_RED
+    BTFSS TABLAT, 2
+    CALL PAINT_WHITE
+
+    BTFSC TABLAT, 3
+    CALL PAINT_RED
+    BTFSS TABLAT, 3
+    CALL PAINT_WHITE
+
+    BTFSC TABLAT, 4
+    CALL PAINT_RED
+    BTFSS TABLAT, 4
+    CALL PAINT_WHITE
+
+    BTFSC TABLAT, 5
+    CALL PAINT_RED
+    BTFSS TABLAT, 5
+    CALL PAINT_WHITE
+
+    BTFSC TABLAT, 6
+    CALL PAINT_RED
+    BTFSS TABLAT, 6
+    CALL PAINT_WHITE
+
+    BTFSC TABLAT, 7
+    CALL PAINT_RED
+    BTFSS TABLAT, 7
+    CALL PAINT_WHITE
+
+    ;TBLRD*+
+    DECFSZ rows_printed, ACCESS
+    CALL PRINT_CRITICAL
+    RETURN
+INIT_TABLE
+    MOVWF TBLPTRL      ; Move value from W (0, 16, or 32) into Table Pointer Low
+    MOVLW .1           ; Set High Byte to 01 (Base address 0x0100)
+    MOVWF TBLPTRH
+    MOVLW .0           ; Set Upper Byte to 00
+    MOVWF TBLPTRU
+    RETURN
+
+GROW
+    MOVLW .32
+    MOVWF which_table,ACCESS
+    RETURN
+    
+GROW2
+    MOVLW .48
+    MOVWF which_table,ACCESS
+    RETURN
+
+    
+TEEN
+    BSF teenager,ACCESS
+    CALL START_MATRIX
+    RETURN
+ADULT
+    BSF adult,ACCESS ;llamada 2 envejecer
+    CALL START_MATRIX
+    RETURN
+IS_DEAD  ; hacer algo mas?
+    BSF dead,ACCESS
+    CALL START_MATRIX
+    RETURN
+    
+DEAD
+    MOVLW .10
+    MOVWF decadas, ACCESS
+    GOTO DEAD
+    
+START_MATRIX
+    BCF INTCON, 5
+    MOVLW .16
+    MOVWF which_table,ACCESS
+    
+    BTFSC teenager, ACCESS
+    CALL GROW
+    
+    BTFSC adult,ACCESS
+    CALL GROW2    
+    
+    MOVF which_table, W, ACCESS
+    
+    BTFSC dead,ACCESS 
+    MOVLW .64
+
+    CALL INIT_TABLE
+    
+    MOVLW .8
+    MOVWF rows_printed,ACCESS
+    BTFSC sano,ACCESS
+    CALL PRINT_HEALTHY
+    BTFSC advertencia,ACCESS
+    CALL PRINT_WARNING
+    BTFSC critico,ACCESS 
+    CALL PRINT_CRITICAL
+    BSF INTCON, 5
+    RETURN
+;------------------------------------------
+; ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////ALIMENTAR TAMAGOTCHI
+;------------------------------------------
+FEED_TAMAGOTCHI ;función ALIMENTAR del menu
+    ;comprobar si tengo tokens disponibles para alimentar
+    ;si tengo, alimentar y resto un token
+    ;si no tengo tokens, hago la rutina de no alimentar
+    MOVLW   .0
+    CPFSEQ comida,ACCESS
+    CALL HEALTHY_STATE
+    RETURN
+
+
+HEALTHY_STATE
+    CLRF contador_90s, ACCESS
+    DECF comida,ACCESS
+    BSF sano,ACCESS
+    BCF advertencia,ACCESS
+    BCF critico,ACCESS
+    CALL START_MATRIX
+    RETURN
+    
+
+    
 MAIN	  
 
-;CALL FIRE
 CALL INIT_PORTS
 CALL INIT_CONFIG
 CALL RESET_INTERRUPTS
+CALL START_MATRIX
 
 LOOP
     BTFSS   PORTB,0,ACCESS
@@ -467,7 +867,8 @@ LOOP
 	CALL BOTON
     BTFSS   PORTB,2,ACCESS
 	CALL BOTON
-
+BTFSC dead,ACCESS 
+Goto DEAD
     
 GOTO LOOP
 	
