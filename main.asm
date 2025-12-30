@@ -42,6 +42,8 @@ CONFIG LVP=OFF
     espera_random	
     espera_random_counter 
      espera_random_base
+     need_refresh
+     reset_valor
     ENDC   
     Posicio_RAM EQU 0x81
     baby_table EQU 0x0110
@@ -96,10 +98,15 @@ RETFIE FAST
     DB 0x7F, 0x73   
     
 INIT_PORTS
+    CLRF comida,ACCESS
+    BCF reset_valor,ACCESS
+    BCF need_refresh,ACCESS
     ;PORTA Todo de salida; grid, servo, RandomGenerated, Menu[2..0]
     MOVLW B'00000000' ;A7 nada, A6 nada, A5 menu 2, A4 menu 1, A3 menu 0, A2 RandomGenerated, A1 servo, A0 grid 
     MOVWF TRISA, ACCESS
     BCF LATA,1,ACCESS
+        BSF LATA,1,ACCESS
+
     BCF LATA,0,ACCESS
     ;PORTB Todo de entrada; botones Left option, Right option, Select, PCI, ResultPulse, NewNumber
     MOVLW B'11111111' ;B7 nada, B6 nada, B5 NewNumber, B4 ResultPulse, B3 PCI, B2 BtnSelect, B1 BtnLeftOption, B0 BtnRightOption
@@ -143,7 +150,8 @@ INIT_PORTS
     BSF sano,ACCESS
     BCF advertencia,ACCESS
     BCF critico,ACCESS
-    
+            BCF LATC,4,0
+
     RETURN
     
 INIT_CONFIG
@@ -153,7 +161,7 @@ INIT_CONFIG
     MOVLW B'10001000'
     MOVWF T0CON, ACCESS
     BSF RCON,IPEN ;Se activan las high-priority
-    MOVLW B'11010000'
+    MOVLW B'11000000'
     MOVWF INTCON3
     BCF INTCON2,RBPU
     RETURN
@@ -162,7 +170,7 @@ RESET_INTERRUPTS
     ;Tins = 4/40MHz = 100ns
     ;0,1ms/100ns = 1k tics
     ;Usamos el timer0 de 16 bits (2^16 = 65536)
-    ;65535 - 1000 = 64536 paradas cada 1ms
+    ;65535 - 1000 = 64536 paradas cada 0,1ms
  
     MOVLW LOW(.64536)
     MOVWF TMR0L,ACCESS
@@ -176,10 +184,9 @@ RESET_INTERRUPTS
 BOTON
     BSF flag_16ms,1
 
-    MOVLW   .160                 ; ¿hemos llegado a 16ms?
-    CPFSEQ  contador_16ms
+    MOVLW   .159                 ; ¿hemos llegado a 16ms?
+    CPFSGT  contador_16ms
     GOTO BOTON                        ; si NO es 16ms vuelvo
-
     ; Si llegamos aquí, contador_16ms == 99
     BCF flag_16ms,1
     CLRF    contador_16ms         ; reseteo segundos
@@ -207,8 +214,8 @@ MS16Vuelta_sinpulsar
 MS16Vuelta
         BSF flag_16ms,1
 
-    MOVLW   .160                 ; ¿hemos llegado a 16ms?
-    CPFSEQ  contador_16ms
+    MOVLW   .159                 ; ¿hemos llegado a 16ms?
+    CPFSGT  contador_16ms
     GOTO MS16Vuelta                        ; si NO es 16ms vuelvo
 
     ; Si llegamos aquí, contador_16ms == 99
@@ -244,8 +251,10 @@ SELECT_MODE
 SELECT_MODE_2
     MOVLW   .2
     CPFSEQ  mode, ACCESS
-    GOTO FEED_TAMAGOTCHI
-    GOTO MAIN
+    BSF reset_valor,ACCESS
+    MOVLW   .3
+    CPFSEQ  mode, ACCESS
+    CALL FEED_TAMAGOTCHI
     RETURN
 
 ;fin menu
@@ -253,6 +262,7 @@ SELECT_MODE_2
 
 GAME ;poner el numero en latc y latd
 	;aleatoriedad
+
   MOVLW .3
   ADDWF espera_random_base,F,ACCESS
    MOVF espera_random_base,W,ACCESS
@@ -267,70 +277,94 @@ GAME ;poner el numero en latc y latd
 GAME_TU_MADRE
 CLRF espera_random_counter,ACCESS  
 GAME_ESPERA_3 ;espera aleatoria para el siguiente numero
+
   MOVF    espera_random,W,ACCESS
-  CPFSEQ  espera_random_counter,ACCESS
+  CPFSGT  espera_random_counter,ACCESS
   GOTO GAME_ESPERA_3
-    
+
   MOVF random_seed,W,ACCESS
   CPFSEQ  random_number,ACCESS
   GOTO CONSEGUIDO
   GOTO GAME_TU_MADRE
+  
 CONSEGUIDO
+  
+  
   MOVFF  random_seed,random_number
   MOVFF  random_number,LATC
+  BTFSC need_refresh,ACCESS
+  CALL START_MATRIX
   CLRF LATD
   MOVLW TAULA7S
   MOVWF TBLPTRL
   MOVF    random_number, W, ACCESS
   ADDWF  TBLPTRL,F,0
+      MOVLW .1           ; Set High Byte to 01 (Base address 0x0100)
+    MOVWF TBLPTRH
+    MOVLW .0           ; Set Upper Byte to 00
+    MOVWF TBLPTRU
   TBLRD*
   MOVFF TABLAT,LATD 
-  
+
   BSF flag_game,1
   CLRF contador_game,ACCESS
   
 GAME_ESPERA_1 ;(espera visual)
-    MOVLW   .100 ;para terminated
-    CPFSEQ  contador_game,ACCESS
+  MOVLW   .200 ;para terminated
+    CPFSGT  contador_game,ACCESS
     GOTO GAME_ESPERA_1
     
     BCF	LATA,2,0 ; cambiamos al estado 2
     CLRF LATD
+
 GAME_ESPERA_2 ;espera parpadeo, aviso de que el numero se va a enviar
-    MOVLW   .110
-    CPFSEQ  contador_game,ACCESS
+    MOVLW   .210
+    CPFSGT  contador_game,ACCESS
     GOTO GAME_ESPERA_2
     
     CLRF espera_random_counter,ACCESS
     
     BSF	LATA,2,0 ; cambiamos al estado 3
 GAME_NEW_NUMBER
+    BTFSC need_refresh,ACCESS
+    CALL START_MATRIX
     BTFSS PORTB,4,0;rpulse
     GOTO FIN_GAME
     BTFSC PORTB,5,0; newnumber
     GOTO GAME_WAIT
     GOTO GAME_NEW_NUMBER
 GAME_WAIT; mantener los datos 1 tiempo
+
       BSF flag_game,1
   CLRF contador_game,ACCESS
 GAME_WAIT_1
+
     MOVLW   .3
-    CPFSEQ  contador_game,ACCESS
+    CPFSGT  contador_game,ACCESS
     GOTO GAME_WAIT_1
     GOTO GAME
+    
 FIN_GAME
+                BCF LATC,4,0
+
     BSF	LATA,2,0
     BSF flag_rpulse,1
-    BTFSC PORTB,4,0;rpulse
+    BTFSS PORTB,4,0;rpulse
     GOTO FIN_GAME
+        
     MOVLW   .14 ; si rpulse
     CPFSGT  contador_rpulse,ACCESS
     GOTO REINICIO_GAME ;x!>1 todo mal
+
 MAS_COMIDA
+
     MOVLW   .5
     CPFSEQ  comida, ACCESS   ; ¿contador == 5?
-    INCF    comida, F        ; si NO es 5 ? contador++
+    INCF    comida,F,ACCESS        ; si NO es 5 ? contador++
+
 REINICIO_GAME
+    MOVF contador_rpulse,W,ACCESS
+    ;MOVWF LATC,0
           BCF flag_game,1
     BCF flag_rpulse,1 
     CLRF contador_rpulse,ACCESS 
@@ -338,10 +372,7 @@ REINICIO_GAME
         CLRF espera_random_base,ACCESS
     GOTO LOOP
     
-;//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////// led RGB
-    
-    
-    UPDATE_LEDS
+UPDATE_LEDS
     ; Limpia solo RA2..RA0 (deja el resto de LATA igual)
     MOVLW   b'11000111'
     ANDWF   LATA, F, ACCESS
@@ -400,8 +431,11 @@ BUCLE_10MS          ; cuenta 10ms, 0,1ms
     CPFSLT  random_seed,ACCESS           ; ¿contador_10ms == 10?
     CLRF      random_seed,ACCESS
     
-    MOVLW   .100                  ; ¿hemos llegado a 10 ticks?
-    CPFSEQ  contador_10ms,ACCESS           ; ¿contador_10ms == 10?
+    MOVLW   .99                  ; ¿hemos llegado a 10 ticks?
+    CPFSGT  contador_10ms,ACSC flag_16ms,1,ACCESS	; contar 16ms
+    INCF    contador_16ms,F,ACCESS         ; contador_seg++
+   
+    BTFSC flag_rpulse,1,ACCESCESS           ; ¿contador_10ms == 10?
     RETURN                        ; si NO es igual
        
     ; Si llegamos aquí, contador_10ms == 10
@@ -416,8 +450,8 @@ BUCLE_SEG           ; cuenta segundos, 10ms
     BTFSC flag_game,1,ACCESS	; contar ms de game
     INCF    contador_game,F,ACCESS  
     
-    MOVLW   .100                  ; ¿hemos llegado a 1s?(1000ms)
-    CPFSEQ  contador_1s,ACCESS  
+    MOVLW   .98                  ; ¿hemos llegado a 1s?(1000ms)
+    CPFSGT  contador_1s,ACCESS  
     RETURN                        ; si NO es 100, salgo
     
     ; Si llegamos aquí, contador_seg == 100
@@ -429,8 +463,8 @@ BUCLE_SEG           ; cuenta segundos, 10ms
 BUCLE_MIN           ; cuenta minutos
     INCF    contador_1m, F,ACCESS         ; contador_min++
    
-    MOVLW   .5                ; hemos llegado a 1min?
-    CPFSEQ  contador_1m,ACCESS  
+    MOVLW   .59               ; hemos llegado a 1min?
+    CPFSGT  contador_1m,ACCESS  
     RETURN                        ; si aún no he llegado, salgo
     CALL    RESET_BUCLES          ;llegada a la decada
     RETURN
@@ -440,8 +474,8 @@ BUCLE_90s ;llamada a cambiar estado
     RETURN
     
     INCF    contador_90s, F
-    MOVLW   .90
-    CPFSEQ  contador_90s
+    MOVLW   .89
+    CPFSGT  contador_90s
     RETURN
     BTFSC advertencia,ACCESS
     GOTO    CRITICAL_STATE
@@ -458,7 +492,7 @@ WARNING_STATE
     BCF sano,ACCESS
     BSF advertencia,ACCESS
     BCF critico,ACCESS
-    CALL START_MATRIX
+    BSF need_refresh,ACCESS
     RETURN
 
 CRITICAL_STATE
@@ -496,15 +530,21 @@ ENVEJECER
     
 PMW
 
-    INCF tact, F
+    INCF tact, F 
 
-    ; t1 = 2*decadas + 5
+    ; t1 = 2*decadas + 4
     MOVF    decadas, W
     MULLW   .2
     MOVF PRODL, W
-    ADDLW .5
+    
+    ADDLW .4
     MOVWF t1
 
+    MOVLW .4
+    cpfsgt t1,ACCESS
+    INCF t1,F,ACCESS
+    cpfsgt t1,ACCESS
+    INCF t1,F,ACCESS
     MOVLW   .200      ; periodo total = 200 ticks * 0,1ms = 20ms
     MOVWF   t0
     MOVF    t1, W
@@ -785,24 +825,29 @@ GROW2
     
 TEEN
     BSF teenager,ACCESS
-    CALL START_MATRIX
+    BSF need_refresh,ACCESS
+
     RETURN
 ADULT
     BSF adult,ACCESS ;llamada 2 envejecer
-    CALL START_MATRIX
+    BSF need_refresh,ACCESS
+
     RETURN
 IS_DEAD  ; hacer algo mas?
     BSF dead,ACCESS
-    CALL START_MATRIX
+    BSF need_refresh,ACCESS
     RETURN
-    
+
 DEAD
+CALL START_MATRIX
+    DEAD_1
     MOVLW .10
     MOVWF decadas, ACCESS
-    GOTO DEAD
+    GOTO DEAD_1
     
 START_MATRIX
-    BCF INTCON, 5
+        BCF need_refresh,ACCESS
+BCF INTCON, GIEH, ACCESS 
     MOVLW .16
     MOVWF which_table,ACCESS
     
@@ -827,7 +872,7 @@ START_MATRIX
     CALL PRINT_WARNING
     BTFSC critico,ACCESS 
     CALL PRINT_CRITICAL
-    BSF INTCON, 5
+BSF INTCON, GIEH, ACCESS
     RETURN
 ;------------------------------------------
 ; ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////ALIMENTAR TAMAGOTCHI
@@ -844,11 +889,11 @@ FEED_TAMAGOTCHI ;función ALIMENTAR del menu
 
 HEALTHY_STATE
     CLRF contador_90s, ACCESS
-    DECF comida,ACCESS
+    DECF comida,F,ACCESS
     BSF sano,ACCESS
     BCF advertencia,ACCESS
     BCF critico,ACCESS
-    CALL START_MATRIX
+        BSF need_refresh,ACCESS
     RETURN
     
 
@@ -867,9 +912,17 @@ LOOP
 	CALL BOTON
     BTFSS   PORTB,2,ACCESS
 	CALL BOTON
-BTFSC dead,ACCESS 
-Goto DEAD
+	BTFSC need_refresh,ACCESS
+    CALL START_MATRIX
+    BTFSC dead,ACCESS 
+    Goto DEAD
+    BTFSC reset_valor,ACCESS
+    GOTO MAIN
+
+
     
 GOTO LOOP
 	
 END
+    
+    
