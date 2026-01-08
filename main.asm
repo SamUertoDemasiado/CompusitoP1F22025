@@ -22,7 +22,7 @@ CONFIG LVP=OFF
     bucle_yellow
     bucle_red
     current_colour
-    counter_alive ;contador que me mira si cambia de color por alimentaciÃ³n
+    counter_alive ;contador que me mira si cambia de color por alimentaciÃƒÂ³n
     which_table
     rows_printed
     sano ;para pintarlo verde
@@ -44,6 +44,7 @@ CONFIG LVP=OFF
      espera_random_base
      need_refresh
      reset_valor
+     decadas_save
     ENDC   
     Posicio_RAM EQU 0x81
     baby_table EQU 0x0110
@@ -98,15 +99,15 @@ RETFIE FAST
     DB 0x7F, 0x73   
     
 INIT_PORTS
+    CLRF decadas_save,ACCESS
     CLRF comida,ACCESS
-    BCF reset_valor,ACCESS
-    BCF need_refresh,ACCESS
+    CLRF  reset_valor,ACCESS
+    CLRF need_refresh,ACCESS
     ;PORTA Todo de salida; grid, servo, RandomGenerated, Menu[2..0]
     MOVLW B'00000000' ;A7 nada, A6 nada, A5 menu 2, A4 menu 1, A3 menu 0, A2 RandomGenerated, A1 servo, A0 grid 
     MOVWF TRISA, ACCESS
     BCF LATA,1,ACCESS
         BSF LATA,1,ACCESS
-
     BCF LATA,0,ACCESS
     ;PORTB Todo de entrada; botones Left option, Right option, Select, PCI, ResultPulse, NewNumber
     MOVLW B'11111111' ;B7 nada, B6 nada, B5 NewNumber, B4 ResultPulse, B3 PCI, B2 BtnSelect, B1 BtnLeftOption, B0 BtnRightOption
@@ -184,21 +185,21 @@ RESET_INTERRUPTS
 BOTON
     BSF flag_16ms,1
 
-    MOVLW   .159                 ; ¿hemos llegado a 16ms?
+    MOVLW   .159                 ; Â¿hemos llegado a 16ms?
     CPFSGT  contador_16ms
     GOTO BOTON                        ; si NO es 16ms vuelvo
-    ; Si llegamos aquí, contador_16ms == 99
+    ; Si llegamos aquÃ­, contador_16ms == 99
     BCF flag_16ms,1
     CLRF    contador_16ms         ; reseteo segundos
 MS16
     BTFSS   PORTB,0,ACCESS      ; si RB0=1 (no pulsado) salta
     CALL    NEXT_MODE
 
-    ; ---- Botón izquierda (RB1) ----
+    ; ---- BotÃ³n izquierda (RB1) ----
     BTFSS   PORTB,1,ACCESS
     CALL    PREV_MODE
 
-    ; ---- Botón select ---
+    ; ---- BotÃ³n select ---
     BTFSS   PORTB,2,ACCESS
     CALL    SELECT_MODE
 
@@ -214,11 +215,11 @@ MS16Vuelta_sinpulsar
 MS16Vuelta
         BSF flag_16ms,1
 
-    MOVLW   .159                 ; ¿hemos llegado a 16ms?
+    MOVLW   .159                 ; Â¿hemos llegado a 16ms?
     CPFSGT  contador_16ms
     GOTO MS16Vuelta                        ; si NO es 16ms vuelvo
 
-    ; Si llegamos aquí, contador_16ms == 99
+    ; Si llegamos aquÃ­, contador_16ms == 99
     BCF flag_16ms,1
     CLRF contador_16ms       ; reseteo segundos
     RETURN
@@ -359,7 +360,7 @@ FIN_GAME
 MAS_COMIDA
 
     MOVLW   .5
-    CPFSEQ  comida, ACCESS   ; ¿contador == 5?
+    CPFSEQ  comida, ACCESS   ; Â¿contador == 5?
     INCF    comida,F,ACCESS        ; si NO es 5 ? contador++
 
 REINICIO_GAME
@@ -404,7 +405,7 @@ MODE3
     
     
     
-; ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////INTERRUPCIÓN DEL TIMER
+; ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////INTERRUPCIÃ“N DEL TIMER
 HIGH_IRS
     ;La interrupcion saltara cada 1ms
     BTFSC INTCON, TMR0IF,ACCESS
@@ -427,18 +428,15 @@ BUCLE_10MS          ; cuenta 10ms, 0,1ms
     INCF    contador_rpulse,F,ACCESS  
     
     INCF random_seed,F,ACCESS
-    MOVLW   .10                  ; ¿hemos llegado a 10 ticks?
-    CPFSLT  random_seed,ACCESS           ; ¿contador_10ms == 10?
+    MOVLW   .10                  ; Â¿hemos llegado a 10 ticks?
+    CPFSLT  random_seed,ACCESS           ; Â¿contador_10ms == 10?
     CLRF      random_seed,ACCESS
     
-    MOVLW   .99                  ; ¿hemos llegado a 10 ticks?
-    CPFSGT  contador_10ms,ACSC flag_16ms,1,ACCESS	; contar 16ms
-    INCF    contador_16ms,F,ACCESS         ; contador_seg++
-   
-    BTFSC flag_rpulse,1,ACCESCESS           ; ¿contador_10ms == 10?
+    MOVLW   .99                  ; Â¿hemos llegado a 10 ticks?
+    CPFSGT  contador_10ms,ACCESS	; contar 16ms
     RETURN                        ; si NO es igual
-       
-    ; Si llegamos aquí, contador_10ms == 10
+           
+    ; Si llegamos aquÃ­, contador_10ms == 10
     CLRF    contador_10ms,ACCESS           ; reseteo a 0
     CALL    BUCLE_SEG             ; acumulo 10ms
     
@@ -450,11 +448,11 @@ BUCLE_SEG           ; cuenta segundos, 10ms
     BTFSC flag_game,1,ACCESS	; contar ms de game
     INCF    contador_game,F,ACCESS  
     
-    MOVLW   .98                  ; ¿hemos llegado a 1s?(1000ms)
+    MOVLW   .98                ; Â¿hemos llegado a 1s?(1000ms)
     CPFSGT  contador_1s,ACCESS  
     RETURN                        ; si NO es 100, salgo
     
-    ; Si llegamos aquí, contador_seg == 100
+    ; Si llegamos aquÃ­, contador_seg == 100
     CLRF    contador_1s,ACCESS           ; reseteo segundos
     CALL    BUCLE_MIN             ; acumulo 1s
     CALL    BUCLE_90s
@@ -463,24 +461,27 @@ BUCLE_SEG           ; cuenta segundos, 10ms
 BUCLE_MIN           ; cuenta minutos
     INCF    contador_1m, F,ACCESS         ; contador_min++
    
-    MOVLW   .59               ; hemos llegado a 1min?
-    CPFSGT  contador_1m,ACCESS  
-    RETURN                        ; si aún no he llegado, salgo
+    MOVLW   .3             ; hemos llegado a 1min?
+    CPFSEQ  contador_1m,ACCESS  
+    RETURN                        ; si aÃºn no he llegado, salgo
     CALL    RESET_BUCLES          ;llegada a la decada
     RETURN
 
 BUCLE_90s ;llamada a cambiar estado
     BTFSC dead,ACCESS
+    CALL    CRITICAL_STATE
+    BTFSC dead,ACCESS
     RETURN
     
     INCF    contador_90s, F
     MOVLW   .89
-    CPFSGT  contador_90s
+    CPFSEQ  contador_90s
     RETURN
     BTFSC advertencia,ACCESS
-    GOTO    CRITICAL_STATE
-    BTFSS advertencia,ACCESS
-    GOTO    WARNING_STATE 
+    CALL    CRITICAL_STATE
+    BTFSC sano,ACCESS
+    CALL    WARNING_STATE 
+    RETURN
 
 RESET_BUCLES
     INCF decadas,F,ACCESS  
@@ -840,9 +841,9 @@ IS_DEAD  ; hacer algo mas?
 
 DEAD
 CALL START_MATRIX
+MOVFF decadas,decadas_save
     DEAD_1
-    MOVLW .10
-    MOVWF decadas, ACCESS
+    MOVFF decadas_save,decadas
     GOTO DEAD_1
     
 START_MATRIX
@@ -858,9 +859,6 @@ BCF INTCON, GIEH, ACCESS
     CALL GROW2    
     
     MOVF which_table, W, ACCESS
-    
-    BTFSC dead,ACCESS 
-    MOVLW .64
 
     CALL INIT_TABLE
     
@@ -877,7 +875,7 @@ BSF INTCON, GIEH, ACCESS
 ;------------------------------------------
 ; ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////ALIMENTAR TAMAGOTCHI
 ;------------------------------------------
-FEED_TAMAGOTCHI ;función ALIMENTAR del menu
+FEED_TAMAGOTCHI ;funciÃ³n ALIMENTAR del menu
     ;comprobar si tengo tokens disponibles para alimentar
     ;si tengo, alimentar y resto un token
     ;si no tengo tokens, hago la rutina de no alimentar
@@ -924,5 +922,3 @@ LOOP
 GOTO LOOP
 	
 END
-    
-    
