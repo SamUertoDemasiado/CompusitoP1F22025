@@ -41,10 +41,10 @@ CONFIG LVP=OFF
     random_seed	
     espera_random	
     espera_random_counter 
-     espera_random_base
-     need_refresh
-     reset_valor
-     decadas_save
+    espera_random_base
+    need_refresh
+    reset_valor
+    decadas_save
     ENDC   
     Posicio_RAM EQU 0x81
     baby_table EQU 0x0110
@@ -118,13 +118,16 @@ INIT_PORTS
     ;PORTD Todo de salida; 7Seg
     MOVLW B'00000000' ;D7 nada, D6 7Seg6, D5 7Seg5, D4 7Seg4, D3 7Seg3, D2 7Seg2, D1 7Seg1, D0 7Seg0
     MOVWF TRISD, ACCESS
-    CLRF espera_random_base
-    CLRF contador_game
-    CLRF flag_game
-    CLRF espera_random_counter
+    CLRF    flag_16ms, ACCESS
+    CLRF    flag_game, ACCESS
+    CLRF    flag_rpulse, ACCESS
+    CLRF espera_random_base, ACCESS
+    CLRF contador_game,ACCESS
+    ;CLRF contador_rpulse,ACCESS
+    ;CLRF espera_random_counter
     CLRF contador_10ms,ACCESS
     CLRF contador_1s,ACCESS
-        CLRF contador_90s,ACCESS
+    CLRF contador_90s,ACCESS
     CLRF contador_1m,ACCESS
     CLRF t0,ACCESS
     CLRF t1,ACCESS
@@ -142,16 +145,16 @@ INIT_PORTS
     BCF dead,ACCESS
     CLRF current_colour,ACCESS
     BSF LATA,0,ACCESS
-        MOVLW .90
+    MOVLW .90
     MOVWF counter_alive,ACCESS
     CLRF which_table, ACCESS
-        MOVLW .8
+    MOVLW .8
     MOVLW .1
     MOVWF rows_printed,ACCESS
     BSF sano,ACCESS
     BCF advertencia,ACCESS
     BCF critico,ACCESS
-            BCF LATC,4,0
+    BCF LATC,4,0
 
     RETURN
     
@@ -183,13 +186,13 @@ RESET_INTERRUPTS
 ;//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////// Funciones para controlar los botones y menus
 
 BOTON
-    BSF flag_16ms,1
+    BSF flag_16ms,ACCESS
 
     MOVLW   .159                 ; ¿hemos llegado a 16ms?
     CPFSGT  contador_16ms
     GOTO BOTON                        ; si NO es 16ms vuelvo
     ; Si llegamos aquí, contador_16ms == 99
-    BCF flag_16ms,1
+    BCF flag_16ms,ACCESS
     CLRF    contador_16ms         ; reseteo segundos
 MS16
     BTFSS   PORTB,0,ACCESS      ; si RB0=1 (no pulsado) salta
@@ -213,14 +216,14 @@ MS16Vuelta_sinpulsar
     BTFSS   PORTB,2,ACCESS
     GOTO    MS16Vuelta_sinpulsar
 MS16Vuelta
-        BSF flag_16ms,1
+    BSF flag_16ms,ACCESS
 
     MOVLW   .159                 ; ¿hemos llegado a 16ms?
     CPFSGT  contador_16ms
     GOTO MS16Vuelta                        ; si NO es 16ms vuelvo
 
     ; Si llegamos aquí, contador_16ms == 99
-    BCF flag_16ms,1
+    BCF flag_16ms,ACCESS
     CLRF contador_16ms       ; reseteo segundos
     RETURN
 NEXT_MODE
@@ -264,16 +267,16 @@ SELECT_MODE_2
 GAME ;poner el numero en latc y latd
 	;aleatoriedad
 
-  MOVLW .3
-  ADDWF espera_random_base,F,ACCESS
-   MOVF espera_random_base,W,ACCESS
-  MOVWF espera_random
-  MOVF	random_seed,W,ACCESS
-  ADDWF  espera_random,F,0
- MOVF	random_number,W,ACCESS
-  ADDWF  espera_random,F,0
- MOVF	contador_10ms,W,ACCESS
-  ADDWF  espera_random,F,0
+    MOVLW .3
+    ADDWF espera_random_base,F,ACCESS
+    MOVF espera_random_base,W,ACCESS
+    MOVWF espera_random
+    MOVF  random_seed,W,ACCESS
+    ADDWF  espera_random,F,ACCESS
+    MOVF	random_number,W,ACCESS
+    ADDWF  espera_random,F,ACCESS
+    MOVF	contador_10ms,W,ACCESS
+    ADDWF  espera_random,F,ACCESS
 ;fin aleatoriedad printar el numero
 GAME_TU_MADRE
 CLRF espera_random_counter,ACCESS  
@@ -299,7 +302,7 @@ CONSEGUIDO
   MOVLW TAULA7S
   MOVWF TBLPTRL
   MOVF    random_number, W, ACCESS
-  ADDWF  TBLPTRL,F,0
+  ADDWF  TBLPTRL,F,ACCESS
       MOVLW .1           ; Set High Byte to 01 (Base address 0x0100)
     MOVWF TBLPTRH
     MOVLW .0           ; Set Upper Byte to 00
@@ -307,7 +310,7 @@ CONSEGUIDO
   TBLRD*
   MOVFF TABLAT,LATD 
 
-  BSF flag_game,1
+  BSF flag_game,ACCESS
   CLRF contador_game,ACCESS
   
 GAME_ESPERA_1 ;(espera visual)
@@ -336,8 +339,8 @@ GAME_NEW_NUMBER
     GOTO GAME_NEW_NUMBER
 GAME_WAIT; mantener los datos 1 tiempo
 
-      BSF flag_game,1
-  CLRF contador_game,ACCESS
+    BSF flag_game,ACCESS
+    CLRF contador_game,ACCESS
 GAME_WAIT_1
 
     MOVLW   .3
@@ -346,10 +349,10 @@ GAME_WAIT_1
     GOTO GAME
     
 FIN_GAME
-                BCF LATC,4,0
+    BCF LATC,4,0
 
     BSF	LATA,2,0
-    BSF flag_rpulse,1
+    BSF flag_rpulse,ACCESS
     BTFSS PORTB,4,0;rpulse
     GOTO FIN_GAME
         
@@ -366,8 +369,8 @@ MAS_COMIDA
 REINICIO_GAME
     MOVF contador_rpulse,W,ACCESS
     ;MOVWF LATC,0
-          BCF flag_game,1
-    BCF flag_rpulse,1 
+    BCF flag_game,ACCESS
+    BCF flag_rpulse,ACCESS 
     CLRF contador_rpulse,ACCESS 
     CLRF LATD
         CLRF espera_random_base,ACCESS
@@ -421,10 +424,10 @@ BUCLE_10MS          ; cuenta 10ms, 0,1ms
     INCF    contador_10ms, F,ACCESS      ; contador_10ms++    
     INCF    espera_random_counter,F,ACCESS  ;contador numero random
     
-    BTFSC flag_16ms,1,ACCESS	; contar 16ms
+    BTFSC flag_16ms,0,ACCESS	; contar 16ms
     INCF    contador_16ms,F,ACCESS         ; contador_seg++
    
-    BTFSC flag_rpulse,1,ACCESS	; contar ms de game
+    BTFSC flag_rpulse,0,ACCESS	; contar ms de game
     INCF    contador_rpulse,F,ACCESS  
     
     INCF random_seed,F,ACCESS
@@ -434,6 +437,7 @@ BUCLE_10MS          ; cuenta 10ms, 0,1ms
     
     MOVLW   .99                  ; ¿hemos llegado a 10 ticks?
     CPFSGT  contador_10ms,ACCESS	; contar 16ms
+
     RETURN                        ; si NO es igual
            
     ; Si llegamos aquí, contador_10ms == 10
@@ -441,11 +445,11 @@ BUCLE_10MS          ; cuenta 10ms, 0,1ms
     CALL    BUCLE_SEG             ; acumulo 10ms
     
     RETURN
-
+;CPFSGT contador_10ms,ACSC flag_16ms,1,ACCESS
 BUCLE_SEG           ; cuenta segundos, 10ms
     INCF    contador_1s, F,ACCESS         ; contador_seg++
     
-    BTFSC flag_game,1,ACCESS	; contar ms de game
+    BTFSC flag_game,ACCESS	; contar ms de game
     INCF    contador_game,F,ACCESS  
     
     MOVLW   .98                ; ¿hemos llegado a 1s?(1000ms)
@@ -461,7 +465,7 @@ BUCLE_SEG           ; cuenta segundos, 10ms
 BUCLE_MIN           ; cuenta minutos
     INCF    contador_1m, F,ACCESS         ; contador_min++
    
-    MOVLW   .3             ; hemos llegado a 1min?
+    MOVLW   .59             ; hemos llegado a 1min?
     CPFSEQ  contador_1m,ACCESS  
     RETURN                        ; si aún no he llegado, salgo
     CALL    RESET_BUCLES          ;llegada a la decada
@@ -497,7 +501,7 @@ WARNING_STATE
     RETURN
 
 CRITICAL_STATE
-        CLRF contador_90s, ACCESS
+    CLRF contador_90s, ACCESS
 
     BCF sano,ACCESS
     BCF advertencia,ACCESS
@@ -519,8 +523,8 @@ ENVEJECER
     CALL ADULT
     
     MOVLW .10
-    CPFSLT decadas,ACCESS
-    BCF adult,ACCESS
+    ;CPFSLT decadas,ACCESS
+    ;BCF adult,ACCESS
     CPFSLT decadas,ACCESS
     BSF dead,ACCESS
     CPFSLT decadas,ACCESS
@@ -836,7 +840,7 @@ ADULT
     RETURN
 IS_DEAD  ; hacer algo mas?
     BSF dead,ACCESS
-    BSF need_refresh,ACCESS
+    ;BSF need_refresh,ACCESS
     RETURN
 
 DEAD
@@ -845,10 +849,10 @@ MOVFF decadas,decadas_save
     DEAD_1
     MOVFF decadas_save,decadas
     GOTO DEAD_1
-    
+   
 START_MATRIX
-        BCF need_refresh,ACCESS
-BCF INTCON, GIEH, ACCESS 
+    BCF need_refresh,ACCESS
+    BCF INTCON, GIEH, ACCESS 
     MOVLW .16
     MOVWF which_table,ACCESS
     
@@ -891,7 +895,7 @@ HEALTHY_STATE
     BSF sano,ACCESS
     BCF advertencia,ACCESS
     BCF critico,ACCESS
-        BSF need_refresh,ACCESS
+    BSF need_refresh,ACCESS
     RETURN
     
 
@@ -904,16 +908,16 @@ CALL RESET_INTERRUPTS
 CALL START_MATRIX
 
 LOOP
-    BTFSS   PORTB,0,ACCESS
+    BTFSS PORTB,0,ACCESS
 	CALL BOTON
-    BTFSS   PORTB,1,ACCESS
+    BTFSS PORTB,1,ACCESS
 	CALL BOTON
-    BTFSS   PORTB,2,ACCESS
+    BTFSS PORTB,2,ACCESS
 	CALL BOTON
 	BTFSC need_refresh,ACCESS
     CALL START_MATRIX
     BTFSC dead,ACCESS 
-    Goto DEAD
+    GOTO DEAD
     BTFSC reset_valor,ACCESS
     GOTO MAIN
 
